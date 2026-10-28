@@ -1,6 +1,6 @@
 # TÍCH — Sổ tiết kiệm kỳ hạn on-chain
 
-Đồ án môn Lập trình Blockchain: một hệ thống gửi tiết kiệm có kỳ hạn chạy hoàn toàn bằng smart contract. Người dùng khóa MockUSDC vào contract, nhận một chứng chỉ NFT (ERC-721) làm bằng chứng cho khoản gửi, hưởng lãi đơn theo lãi suất đã chốt lúc mở sổ, rồi tất toán đúng hạn, rút trước hạn chịu phạt, hoặc tái tục sang kỳ hạn mới.
+Đồ án môn Lập trình Blockchain: một hệ thống gửi tiết kiệm có kỳ hạn chạy hoàn toàn bằng smart contract. Người dùng khóa MockUSDC vào contract, nhận một chứng chỉ NFT (ERC-721) làm bằng chứng cho khoản gửi, hưởng lãi đơn theo lãi suất đã chốt lúc mở sổ, rồi tất toán đúng hạn, rút trước hạn chịu phạt, hoặc tái gửi sang kỳ hạn mới.
 
 Phần giao diện là React + TypeScript, kết nối MetaMask và đọc/ghi trực tiếp lên ba contract đã deploy trên Sepolia. Sau khi kết nối, số dư, danh sách gói và danh sách sổ đều đọc từ chain; frontend chỉ giữ một bộ gói mặc định để vẽ khung trang trong lúc chờ RPC trả về.
 
@@ -46,7 +46,7 @@ npm --prefix frontend install
 
 ## Cấu hình địa chỉ contract
 
-Frontend đọc địa chỉ từ `frontend/.env.local`. File này nằm trong `.gitignore` và phải được tạo lại trên mỗi máy:
+Tạo file .env.local tham khảo file .env.example:
 
 ```text
 VITE_CHAIN_ID=11155111
@@ -78,7 +78,7 @@ Mở `http://127.0.0.1:5173/`. Sau khi Vite chạy:
 2. Chuyển MetaMask sang **Sepolia** (chain ID `11155111`). Danh sách RPC có ở [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111).
 3. Thêm token để nhìn thấy số dư: contract `0x4A5ee598558e49c78a545417B38251566482785c`, symbol `USDC`, decimals `6`.
 4. Vào **Gói tiết kiệm**, chọn kỳ hạn, bấm mở sổ. Lần đầu tiên, ví sẽ hỏi hai giao dịch: `approve` cấp hạn mức USDC cho contract, sau đó `openDeposit`. Những lần sau hạn mức vẫn còn nên chỉ còn một giao dịch mở sổ.
-5. Vào **Sổ của tôi** để xem chứng chỉ NFT, tất toán, rút trước hạn hoặc tái tục.
+5. Vào **Sổ của tôi** để xem chứng chỉ NFT, tất toán, rút trước hạn hoặc tái gửi.
 
 MockUSDC là token test và hàm `mint` mở công khai, nên ví chưa có tiền vẫn lấy được: vào trang [Write Contract](https://sepolia.etherscan.io/address/0x4A5ee598558e49c78a545417B38251566482785c#writeContract), gọi `mint` với địa chỉ ví và số lượng theo đơn vị 6 decimals (1.000 USDC = `1000000000`). Ví cũng cần một ít Sepolia ETH để trả gas; faucet có trong chainlist hoặc ở [sepoliafaucet.com](https://sepoliafaucet.com).
 
@@ -100,11 +100,9 @@ SavingCore     100.00% lines / 100.00% statements
 Total          100.00% lines / 100.00% statements
 ```
 
-Bộ test phủ các luồng bắt buộc, các nhánh lỗi và mấy chỗ dễ sai: thiếu allowance, snapshot APR sau khi admin sửa gói, biên đáo hạn và biên grace, rút hai lần, vault thiếu lãi khi cả rút lẫn tái tục, pause chặn mọi lối ra, chuyển NFT đổi chủ, gói có penalty bằng 0 và trường hợp lãi làm tròn xuống 0. Chi tiết cách chia nhóm test nằm trong [contracts/README.md](contracts/README.md).
+Bộ test phủ các luồng bắt buộc, các nhánh lỗi và mấy chỗ dễ sai: thiếu allowance, snapshot APR sau khi admin sửa gói, biên đáo hạn và biên grace, rút hai lần, vault thiếu lãi khi cả rút lẫn tái gửi, pause chặn mọi lối ra, chuyển NFT đổi chủ, gói có penalty bằng 0 và trường hợp lãi làm tròn xuống 0. Chi tiết cách chia nhóm test nằm trong [contracts/README.md](contracts/README.md).
 
 ## Đổi bộ tham số theo MSSV khác
-
-MSSV không phải 22665321 thì phải sửa trước khi nộp, vì giảng viên sẽ đối chiếu con số trên video với MSSV thật.
 
 **Bước 1 — sửa file cấu hình.** Mở [contracts/config/personal.ts](contracts/config/personal.ts), thay `STUDENT_ID`, `A`, `B`:
 
@@ -148,7 +146,7 @@ npm run test:sepolia
 npm run test:sepolia:fork
 ```
 
-`verify:testnet` đọc RPC thật rồi đối chiếu chain ID, bytecode từng contract, liên kết token–vault–core, role, grace period, fee receiver, bốn gói và số dư vault. `test:sepolia` gửi giao dịch thật để mở sổ và rút trước hạn. `test:sepolia:fork` dựng một bản fork của state Sepolia tại block đã deploy rồi tua thời gian, nhờ vậy kiểm tra được tất toán, tái tục và auto-renew mà không phải chờ 90 ngày — hash in ra ở chế độ này chỉ tồn tại trên fork local.
+`verify:testnet` đọc RPC thật rồi đối chiếu chain ID, bytecode từng contract, liên kết token–vault–core, role, grace period, fee receiver, bốn gói và số dư vault. `test:sepolia` gửi giao dịch thật để mở sổ và rút trước hạn. `test:sepolia:fork` dựng một bản fork của state Sepolia tại block đã deploy rồi tua thời gian, nhờ vậy kiểm tra được tất toán, tái gửi và auto-renew mà không phải chờ 90 ngày — hash in ra ở chế độ này chỉ tồn tại trên fork local.
 
 Deploy một lần là đủ cho cả đồ án. Chạy lại `deploy:testnet` sẽ tạo bộ địa chỉ mới và tốn thêm Sepolia ETH.
 
@@ -181,7 +179,7 @@ Ba contract, mỗi cái giữ một loại tiền khác nhau:
 | --- | --- | --- |
 | `MockUSDC` | không giữ tiền | ERC-20 6 decimals, `mint` công khai để test |
 | `VaultManager` | tiền lãi của ngân hàng | nạp/rút vault, fee receiver, pause, trả lãi cho `SavingCore` |
-| `SavingCore` | gốc của người gửi | gói, NFT chứng chỉ, snapshot, tất toán, rút sớm, tái tục |
+| `SavingCore` | gốc của người gửi | gói, NFT chứng chỉ, snapshot, tất toán, rút sớm, tái gửi |
 | `IVaultManager` | — | interface định kiểu cho ba lời gọi từ core sang vault |
 
 Việc tách gốc và lãi không chỉ để cho giống ngân hàng thật. Nếu gộp chung, một sổ đáo hạn sẽ được trả bằng tiền của người gửi sau, tức là mô hình Ponzi thu nhỏ. Ở đây `SavingCore` chỉ trả gốc bằng đúng khoản đã nhận khi mở sổ, còn lãi luôn đi qua `VaultManager`. Vault cạn tiền thì `payInterest` revert và cả giao dịch quay lại trạng thái cũ.
@@ -195,15 +193,13 @@ interest = principal × aprBpsAtOpen × tenorDays / (365 × 10_000)
 penalty  = principal × penaltyBpsAtOpen / 10_000
 ```
 
-Bốn trạng thái của một sổ là `Active`, `Withdrawn`, `ManualRenewed` và `AutoRenewed`. Ba hàm do người dùng chủ động gọi là tất toán, rút sớm và tái tục thủ công đều kiểm tra cả `status == Active` lẫn `ownerOf(depositId) == msg.sender`. Riêng `autoRenewDeposit` cố tình không chặn người gọi, nhưng vẫn chỉ nhận sổ `Active` và mint chứng chỉ mới cho chủ sở hữu hiện tại của NFT.
+Bốn trạng thái của một sổ là `Active`, `Withdrawn`, `ManualRenewed` và `AutoRenewed`. Ba hàm do người dùng chủ động gọi là tất toán, rút sớm và tái gửi thủ công đều kiểm tra cả `status == Active` lẫn `ownerOf(depositId) == msg.sender`. Riêng `autoRenewDeposit` cố tình không chặn người gọi, nhưng vẫn chỉ nhận sổ `Active` và mint chứng chỉ mới cho chủ sở hữu hiện tại của NFT.
 
 ## Design Answers
 
-Phần này trả lời bảy câu hỏi trong đề, dựa trên đúng code đang chạy chứ không phải thiết kế trên giấy.
-
 ### 1. Chứng chỉ chuyển nhượng: Alice bán NFT cho Bob thì ai rút được?
 
-Bob, vì quyền rút gắn với chủ sở hữu NFT hiện tại chứ không gắn với người mở sổ ban đầu. Mỗi lần chủ sổ gọi tất toán, rút sớm hoặc tái tục, [`_requireActiveOwner`](contracts/contracts/SavingCore.sol#L293) kiểm tra `ownerOf(depositId) == msg.sender`; Alice sau khi chuyển NFT không còn thỏa điều kiện đó nên gọi vào sẽ nhận lỗi `Core: not certificate owner`. Nhánh auto-renew cũng mint chứng chỉ mới cho `ownerOf(depositId)` tại thời điểm gia hạn, nên quyền lợi đi theo NFT chứ không quay về người gửi cũ.
+Bob, vì quyền rút gắn với chủ sở hữu NFT hiện tại chứ không gắn với người mở sổ ban đầu. Mỗi lần chủ sổ gọi tất toán, rút sớm hoặc tái gửi, [`_requireActiveOwner`](contracts/contracts/SavingCore.sol#L293) kiểm tra `ownerOf(depositId) == msg.sender`; Alice sau khi chuyển NFT không còn thỏa điều kiện đó nên gọi vào sẽ nhận lỗi `Core: not certificate owner`. Nhánh auto-renew cũng mint chứng chỉ mới cho `ownerOf(depositId)` tại thời điểm gia hạn, nên quyền lợi đi theo NFT chứ không quay về người gửi cũ.
 
 Cách làm này cho phép hình thành thị trường thứ cấp: người cần tiền gấp có thể bán sổ đang có lãi suất tốt thay vì chịu phạt 4% rồi mất toàn bộ lãi. Đổi lại, NFT trở thành tài sản "ai cầm là của người đó". Mất ví, lỡ `approve`, hay chuyển nhầm địa chỉ đều đồng nghĩa mất luôn quyền rút tiền, và ngân hàng không có cách nào can thiệp. Vì vậy giao diện chỉ liệt kê những chứng chỉ mà ví đang kết nối thực sự sở hữu, không lưu lại người gửi ban đầu, và mỗi thẻ sổ có liên kết sang Etherscan để đối chiếu chủ sở hữu thật trên chain.
 
@@ -229,13 +225,13 @@ Làm tròn xuống không thể gây revert hay âm số, vì nó chỉ làm s�
 
 Là rút đúng hạn. [`withdrawAtMaturity`](contracts/contracts/SavingCore.sol#L153) và [`renewDeposit`](contracts/contracts/SavingCore.sol#L190) dùng `block.timestamp >= maturityAt`, còn [`earlyWithdraw`](contracts/contracts/SavingCore.sol#L170) dùng `block.timestamp < maturityAt`. Hai điều kiện loại trừ nhau hoàn toàn, không có giây nào lọt vào cả hai nhánh. Tôi chọn dấu `>=` cho mốc đáo hạn vì bảo vệ người gửi: ai canh đúng giây đáo hạn để rút thì không bị trừ 4% oan.
 
-Với auto-renew, điều kiện là `block.timestamp >= maturityAt + gracePeriod`, nên giây cuối cùng của grace đã tính là đủ. Người dùng vẫn có thể tái tục thủ công tại đúng giây đó nếu giao dịch auto-renew chưa được thực thi, vì `renewDeposit` chỉ quan tâm mốc đáo hạn chứ không quan tâm grace. Chỉ khi một giao dịch auto-renew đã chạy thì sổ mới đổi trạng thái và cửa tái tục thủ công mới đóng.
+Với auto-renew, điều kiện là `block.timestamp >= maturityAt + gracePeriod`, nên giây cuối cùng của grace đã tính là đủ. Người dùng vẫn có thể tái gửi thủ công tại đúng giây đó nếu giao dịch auto-renew chưa được thực thi, vì `renewDeposit` chỉ quan tâm mốc đáo hạn chứ không quan tâm grace. Chỉ khi một giao dịch auto-renew đã chạy thì sổ mới đổi trạng thái và cửa tái gửi thủ công mới đóng.
 
 ### 6. Admin tắt gói trong khi vẫn còn sổ đang chạy thì sao?
 
-Những sổ đó không bị ảnh hưởng gì. `setPlanEnabled` chỉ đổi cờ `plans[planId].enabled`, còn dữ liệu của từng sổ là bản snapshot riêng nên vẫn giữ nguyên APR, penalty và tenor. Người dùng tiếp tục tất toán đúng hạn, rút sớm với mức phạt cũ, hoặc tái tục sang một gói khác đang mở.
+Những sổ đó không bị ảnh hưởng gì. `setPlanEnabled` chỉ đổi cờ `plans[planId].enabled`, còn dữ liệu của từng sổ là bản snapshot riêng nên vẫn giữ nguyên APR, penalty và tenor. Người dùng tiếp tục tất toán đúng hạn, rút sớm với mức phạt cũ, hoặc tái gửi sang một gói khác đang mở.
 
-Chỗ tôi chủ động chặn là tái tục *vào* gói đã tắt: `renewDeposit` kiểm tra `newPlan.enabled` nên không ai đẩy được vốn mới vào một sản phẩm đã đóng. Ngược lại, [`autoRenewDeposit`](contracts/contracts/SavingCore.sol#L219) vẫn cho phép gia hạn theo gói gốc dù gói đó đã bị tắt. Lý do: auto-renew là nghĩa vụ đã cam kết với sổ đang mở, không phải một khách hàng mới mở sổ. Nếu chặn luôn nhánh này, việc đóng một sản phẩm sẽ tước mất quyền gia hạn đã hứa với người gửi cũ.
+Chỗ tôi chủ động chặn là tái gửi *vào* gói đã tắt: `renewDeposit` kiểm tra `newPlan.enabled` nên không ai đẩy được vốn mới vào một sản phẩm đã đóng. Ngược lại, [`autoRenewDeposit`](contracts/contracts/SavingCore.sol#L219) vẫn cho phép gia hạn theo gói gốc dù gói đó đã bị tắt. Lý do: auto-renew là nghĩa vụ đã cam kết với sổ đang mở, không phải một khách hàng mới mở sổ. Nếu chặn luôn nhánh này, việc đóng một sản phẩm sẽ tước mất quyền gia hạn đã hứa với người gửi cũ.
 
 ### 7. Một cuộc tấn công thực tế và cơ chế chặn
 

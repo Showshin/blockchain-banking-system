@@ -6,7 +6,7 @@ Solidity implementation for the three required contracts in the project specific
 |---|---|
 | `contracts/MockUSDC.sol` | ERC-20 test token, 6 decimals, public mint |
 | `contracts/VaultManager.sol` | Kho lãi của ngân hàng, fee receiver, pause và trả lãi |
-| `contracts/SavingCore.sol` | Gói, chứng chỉ ERC-721, tất toán, rút sớm và tái tục |
+| `contracts/SavingCore.sol` | Gói, chứng chỉ ERC-721, tất toán, rút sớm và tái gửi |
 | `contracts/interfaces/IVaultManager.sol` | Ranh giới `SavingCore` → `VaultManager` |
 
 `IVaultManager` chỉ là interface định kiểu; không có bytecode được deploy riêng. Ba contract còn lại giữ đúng vai trò tiền gốc, kho lãi và mock token của đề bài.
