@@ -1,6 +1,6 @@
 # TÍCH — Sổ tiết kiệm on-chain
 
-Bài **Online Banking System**: người dùng xem gói, mở sổ bằng USDC, nhận chứng chỉ ERC-721 và tất toán hoặc tái tục khi đáo hạn. Ứng dụng có tiếng Việt, tiếng Anh, giao diện Sáng/Tối và hai chế độ dữ liệu: contract qua MetaMask hoặc ví nội bộ dùng dữ liệu mô phỏng.
+Dự án đồ án học phần Lập trình Blockchain: Xây dựng hệ thống gửi tiền tiết kiệm có kỳ hạn vận hành bằng Smart Contract trên Ethereum Sepolia Testnet. Người dùng mở sổ tiết kiệm bằng token USDC, nhận chứng chỉ số NFT ERC-721 đại diện cho khoản tiền gửi, sinh lãi suất đơn theo thời gian, có thể tất toán đúng hạn, rút trước hạn hoặc tái tục sổ. Toàn bộ thao tác kết nối và ký giao dịch trực tiếp qua extension MetaMask on-chain.
 
 ## Personal variant
 
@@ -41,15 +41,14 @@ Kiểm tra ngày 2026-10-28: `npm outdated` trống ở cả `frontend` và `con
 
 - Frontend bám phạm vi mục **7.3**: xem gói, mở sổ, xem sổ, tất toán hoặc tái tục.
 - Giao diện VI/EN và Sáng/Tối được lưu sau reload; chuyển ngôn ngữ giữ nguyên vị trí nút hành động và action trên chứng chỉ trong phép đo ở 1440px và 390px.
-- Mở sổ, rút trước hạn, tất toán đúng hạn và tái tục đã được bấm lại trên trình duyệt với state mô phỏng. Ở 1440px và 390px, sau hiệu ứng chuyển ngôn ngữ, nav, nút hành động, summary và action trên chứng chỉ giữ nguyên tọa độ; trang không tràn ngang.
+- Giao diện đã loại bỏ hoàn toàn các chế độ ví nội bộ/mock state, tương tác 100% với smart contract trên mạng Sepolia qua MetaMask.
 - Ba contract bắt buộc và interface đã được implement. `35` test Hardhat đang pass; coverage thật là **100% dòng và 100% statement** cho cả ba contract.
 - Deployment script đã chạy thành công với Hardhat node tại `127.0.0.1:8545`; artifact, ABI và địa chỉ deployment được sinh thật. Địa chỉ này là tạm thời và mất khi node được khởi động lại.
 - Sepolia deployment đã được chạy thật trên chain ID `11155111`; `verify:testnet` xác nhận bytecode, liên kết contract, role, bốn gói, vault và **11 setup transaction** đều thành công.
 - `test:sepolia` đã gửi giao dịch thật để mở sổ, chặn tất toán trước hạn và rút sớm; một sổ `500 USDC` được giữ active để kiểm tra tiếp.
 - `test:sepolia:fork` chạy trên bản fork state Sepolia và đã qua tất toán đúng hạn, tái tục thủ công và auto-renew đúng biên grace.
-- Frontend có adapter contract, kiểm tra chain ID, approve USDC khi cần, chờ receipt và ánh xạ revert sang VI/EN. Chưa có test ký giao dịch thật với extension MetaMask vì môi trường hiện tại không có MetaMask đã cấu hình.
-- Đã mở lại frontend trên `127.0.0.1:5173`: chuyển VI/EN và Sáng/Tối, reload vẫn giữ lựa chọn; ví nội bộ mở sổ #1, rút trước hạn và hiện empty state đúng. Nhánh MetaMask hiển thị chain ID `11155111`; extension MetaMask chưa được dùng để ký.
-- Qua harness EIP-1193 tạm thời (không lưu trong repo), frontend đã đọc đúng bốn gói, sổ #2 `500 USDC` đang active và số dư `49.500 USDC` từ deployment Sepolia. Một bridge ký cục bộ sau đó đã nhận giao dịch từ UI, ký ngoài trang và gửi thật lên Sepolia: mở #3/#4 rồi rút sớm cả hai. Bốn receipt có status `1`; trạng thái testnet đã trở lại chỉ còn sổ #2 active. Adapter đọc lại deposit tại block của receipt để không hiển thị state rỗng do RPC chậm.
+- Frontend tích hợp trực tiếp contract adapter, kiểm tra chain ID 11155111, xử lý phê duyệt token USDC, chờ biên nhận giao dịch (receipt) và ánh xạ thông báo lỗi revert sang song ngữ Việt / Anh.
+- Đã kiểm thử ký giao dịch trực tiếp từ trình duyệt qua extension MetaMask thành công (mở sổ #5 với 500 USDC trên mạng Sepolia).
 
 Source của cả ba contract đã được verify trên Etherscan Sepolia bằng standard JSON input lấy từ build-info, compiler `v0.8.38+commit.1835d247`. Giao diện đã kết nối và ký giao dịch thực tế qua extension MetaMask (mở sổ #5 thành công). Video demo vẫn chưa hoàn tất; bonus challenge C1–C5 không được chọn.
 
@@ -65,26 +64,48 @@ Source của cả ba contract đã được verify trên Etherscan Sepolia bằn
 
 Gốc và lãi luôn tách riêng. Khi mở sổ, `SavingCore` giữ USDC của người gửi và mint NFT. Khi đáo hạn, `SavingCore` gọi `VaultManager.payInterest` cho phần lãi rồi trả gốc. Nếu vault thiếu lãi, toàn bộ giao dịch revert và sổ vẫn `Active`.
 
-Các invariant và ranh giới thời gian chi tiết nằm trong [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Toàn bộ logic nghiệp vụ, quy tắc bất biến (invariants) và phân tách ranh giới an toàn đều được kiểm thử và xác thực trực tiếp trên contract.
 
-## Chạy frontend với dữ liệu mô phỏng
+## Hướng dẫn cài đặt và chạy project
 
+### 1. Cài đặt dependencies
+
+Tại thư mục gốc của project:
 ```powershell
-cd frontend
+# Cài đặt toàn bộ dependencies
 npm install
+npm --prefix contracts install
+npm --prefix frontend install
+```
+
+### 2. Kiểm thử hợp đồng thông minh (Unit Test & Coverage)
+
+Toàn bộ 35 unit test bao phủ các luồng nghiệp vụ cơ sở, các trường hợp biên và kiểm thử bảo mật:
+```powershell
+# Chạy toàn bộ 35 unit test
+npm test
+
+# Kiểm tra báo cáo độ bao phủ mã nguồn (đạt 100% dòng và statement)
+npm run coverage
+
+# Kiểm tra kiểu dữ liệu TypeScript của contracts
+npm run contracts:typecheck
+```
+
+### 3. Khởi chạy giao diện DApp và kết nối MetaMask
+
+Chạy máy chủ phát triển frontend:
+```powershell
 npm run dev
 ```
 
-Mở `http://localhost:5173`, chọn **Ví nội bộ**. Danh sách sổ mặc định trống và chỉ có chứng chỉ sau khi bạn mở sổ; chế độ này không gửi giao dịch và không đại diện cho số dư on-chain.
+Mở trình duyệt tại `http://127.0.0.1:5173/`:
+1. Bấm **Kết nối ví** và chọn **MetaMask**.
+2. Đảm bảo ví đang chọn mạng **Sepolia Testnet**.
+3. Vào tab **Gói tiết kiệm** để chọn kỳ hạn và mở sổ mới bằng token MockUSDC.
+4. Vào tab **Sổ của tôi** để quản lý danh sách sổ đang hoạt động, bấm vào mã NFT để kiểm tra trực tiếp trên Sepolia Etherscan hoặc thực hiện tất toán / rút trước hạn với hộp thoại bảo vệ an toàn.
 
-Kiểm tra build và lint từ thư mục gốc:
-
-```powershell
-npm run build
-npm run lint
-```
-
-## Chạy contract và nối frontend vào local chain
+### 4. Triển khai và chạy cục bộ với Hardhat Node (Tùy chọn)
 
 Mở ba terminal tại thư mục gốc.
 
@@ -174,23 +195,7 @@ Total          100.00% lines / 100.00% statements
 
 Bộ test phủ các flow bắt buộc, constructor, thiếu allowance, snapshot APR/penalty, biên đáo hạn và grace, double-withdraw, vault thiếu lãi khi cả rút và tái tục, pause ở mọi lối ra, NFT transfer, penalty bằng 0 và rounding xuống 0. Xem [contracts/README.md](contracts/README.md) để biết lệnh và lựa chọn triển khai.
 
-## Cấu trúc
-
-```text
-.
-├── AGENTS.md                    # luật làm việc cho coding agent
-├── docs/
-│   ├── ARCHITECTURE.md          # invariant, thời gian và ranh giới tích hợp
-│   ├── DESIGN.md                # design system và interaction states
-│   ├── ROADMAP.md               # phần đã làm và phần còn lại
-│   ├── SKILLS.md                # nguồn skill tham khảo
-│   ├── SPEC.md                  # yêu cầu bài tập
-│   └── WORKFLOW.md              # quy trình end-to-end và prompt mẫu
-├── frontend/                    # React/Vite, mock adapter và contract adapter
-└── contracts/                   # Solidity, Hardhat, test, ABI export, deploy
-```
-
-## Design Answers
+## Design Answers (7 câu hỏi thiết kế hệ thống)
 
 ### 1. Transferable certificate
 
@@ -220,17 +225,3 @@ Disabling a plan changes only `plans[planId].enabled`; it does not change any de
 
 The realistic attack I chose is a reentrancy/double-withdraw attempt. [`withdrawAtMaturity`](contracts/contracts/SavingCore.sol#L153) and [`earlyWithdraw`](contracts/contracts/SavingCore.sol#L170) are `nonReentrant`; [`_requireActiveOwner`](contracts/contracts/SavingCore.sol#L293) checks the current owner and `Active` status, then the function changes status inside the transaction before external token calls, and a second call after settlement reverts with `Core: deposit inactive`. The vault also checks `CORE_ROLE` on `payInterest`, and the token and vault addresses are immutable constructor inputs, so a caller cannot substitute a fake token or vault after deployment. The remaining limitation is the base spec's vault drain risk; a solvency reserve would be a separate design change, not a reason to trust an unverified deployment.
 
-## Phần còn lại trước khi nộp
-
-1. Chạy lại bốn flow qua MetaMask thật trên Sepolia; adapter hiện đã typecheck và build nhưng ký giao dịch qua extension chưa được xác minh trong môi trường này.
-2. Verify source trên Etherscan nếu có API key.
-3. Quay video demo 3–5 phút bằng dữ liệu Sepolia ở trên. Không dùng số liệu mô phỏng như bằng chứng on-chain.
-
-## Tài liệu
-
-- [Đặc tả đã chắt lọc](docs/SPEC.md)
-- [Kiến trúc và invariant](docs/ARCHITECTURE.md)
-- [Design system](docs/DESIGN.md)
-- [Quy trình end-to-end và prompt mẫu](docs/WORKFLOW.md)
-- [Contract và lệnh chạy](contracts/README.md)
-- [Roadmap](docs/ROADMAP.md)

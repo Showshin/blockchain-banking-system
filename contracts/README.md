@@ -1,6 +1,6 @@
 # Contracts — TÍCH
 
-Solidity implementation for the three required contracts in `docs/SPEC.md`.
+Solidity implementation for the three required contracts in the project specification.
 
 | File | Vai trò |
 |---|---|
