@@ -1,0 +1,46 @@
+{
+  "name": "tich-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TÍCH on-chain term-deposit contracts and tests",
+  "engines": {
+    "node": ">=24.22.1"
+  },
+  "scripts": {
+    "compile": "hardhat build",
+    "typecheck": "tsc --noEmit",
+    "export:abis": "hardhat build && tsx scripts/export-abis.ts",
+    "test": "hardhat test",
+    "coverage": "hardhat test --coverage",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network testnet",
+    "verify:local": "hardhat run scripts/verify-deployment.ts --network localhost",
+    "verify:testnet": "hardhat run scripts/verify-deployment.ts --network testnet",
+    "testnet:smoke": "hardhat run scripts/sepolia-e2e.ts --network testnet",
+    "testnet:fork": "hardhat run scripts/sepolia-e2e.ts --network sepoliaFork",
+    "configure:frontend": "tsx scripts/configure-frontend.ts"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.2.1",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "^3.0.13",
+    "@nomicfoundation/hardhat-mocha": "^4.0.1",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.12",
+    "@types/chai": "5.2.3",
+    "@types/mocha": "10.0.10",
+    "@types/node": "26.6.5",
+    "chai": "6.3.0",
+    "ethers": "6.17.0",
+    "hardhat": "3.21.1",
+    "mocha": "12.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

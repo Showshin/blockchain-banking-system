@@ -1,0 +1,71 @@
+{
+  "network": "testnet",
+  "chainId": 11155111,
+  "deploymentBlock": 12010637,
+  "completedBlock": 12010648,
+  "deployedAt": "2026-10-28T06:54:01.768Z",
+  "deployer": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
+  "feeReceiver": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
+  "explorerBaseUrl": "https://sepolia.etherscan.io",
+  "contracts": {
+    "MockUSDC": "0x4A5ee598558e49c78a545417B38251566482785c",
+    "VaultManager": "0x63C7e3c9c3F70b1692f13ad21252ba3a02e3bEe5",
+    "SavingCore": "0xD2297a633D35f2F6E78f4eAD8BF214E241704ECf"
+  },
+  "transactions": {
+    "MockUSDC": "0x7ba392b5f435a79c171f083c26cfd973857d2c1aa67a857d52d5ac05a56f92d8",
+    "VaultManager": "0x13fd5a563134fb97cf6fd95914523b8ff0b2e2e8a20b3ea128505444b1567b7f",
+    "SavingCore": "0x5caa4e780a774f9149f1f086dc5fd8656c84fb5bafdb2bd2d636fba9230d379e",
+    "grantCoreRole": "0xae219106eb7054964bbf0770e35653b2cd70eee7082a86d3c2c2078ec9b04b6a",
+    "mint": "0xf3472209a703422230150d8bf708ba1d6de4faf2442bd30a350f0d5ad4a98927",
+    "approveVault": "0x2542eee7b3942aab6ed3efdfe84830712e9ea3a231bb7f4db61362527a34890f",
+    "fundVault": "0x041e7924f4e73e6cb89165d47058d5f336326c1aa5ab809e9008d05f57add10c",
+    "createPlans": [
+      "0xa832138f073b5bd5d30d6e237cc72d5e08528feaf1a244a0144cedcda6788ef9",
+      "0xdbbaadcec657a6c86cfbf67102824d0f828d01ab34b2a4626328756858e5bf88",
+      "0xb8bd1ed18d4024820bd732df388a22e2ab0187d764f5e16eebaeecd1b448e1f2",
+      "0x37d735f9574faaed18d6ae3f5633eab5dc4d2ba23ec69e58dbdedba1f5bdaea4"
+    ]
+  },
+  "personalVariant": {
+    "studentId": "22665321",
+    "gracePeriodSeconds": "259200",
+    "defaultAprBps": 225,
+    "defaultPenaltyBps": 400,
+    "defaultTenorDays": 90
+  },
+  "plans": [
+    {
+      "planId": 1,
+      "tenorDays": 30,
+      "aprBps": 175,
+      "minDeposit": "100000000",
+      "maxDeposit": "25000000000",
+      "penaltyBps": 200
+    },
+    {
+      "planId": 2,
+      "tenorDays": 90,
+      "aprBps": 225,
+      "minDeposit": "500000000",
+      "maxDeposit": "100000000000",
+      "penaltyBps": 400
+    },
+    {
+      "planId": 3,
+      "tenorDays": 180,
+      "aprBps": 300,
+      "minDeposit": "1000000000",
+      "maxDeposit": "250000000000",
+      "penaltyBps": 450
+    },
+    {
+      "planId": 4,
+      "tenorDays": 365,
+      "aprBps": 400,
+      "minDeposit": "2500000000",
+      "maxDeposit": "500000000000",
+      "penaltyBps": 500
+    }
+  ]
+}

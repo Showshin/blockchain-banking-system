@@ -1,0 +1,27 @@
+{
+  "name": "tich-on-chain-banking",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24.22.1"
+  },
+  "description": "TÍCH — on-chain term deposits for the Online Banking System assignment",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
+    "preview": "npm --prefix frontend run preview",
+    "contracts:compile": "npm --prefix contracts run compile",
+    "contracts:export-abis": "npm --prefix contracts run export:abis",
+    "contracts:typecheck": "npm --prefix contracts run typecheck",
+    "test": "npm --prefix contracts run test",
+    "coverage": "npm --prefix contracts run coverage",
+    "deploy:local": "npm --prefix contracts run deploy:local",
+    "deploy:testnet": "npm --prefix contracts run deploy:testnet",
+    "verify:local": "npm --prefix contracts run verify:local",
+    "verify:testnet": "npm --prefix contracts run verify:testnet",
+    "test:sepolia": "npm --prefix contracts run testnet:smoke",
+    "test:sepolia:fork": "npm --prefix contracts run testnet:fork",
+    "configure:frontend": "npm --prefix contracts run configure:frontend"
+  }
+}

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+coverage/
+artifacts/
+cache/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Editor and OS
+.vscode/
+.idea/
+Thumbs.db
+
+# Environment & secrets
+*.local
+*.protected
+*.pem
+*.key
