@@ -1,10 +1,5 @@
 import type { BankState, SavingPlan } from '../types'
 
-export const STORAGE_KEY = 'tich-bank-v9'
-export const SCHEMA_VERSION = 9
-
-const LOCAL_ADDRESS = '0x7A3F1b9c4D2e8F07A6c5B9218E03D4F6a9C21B7e'
-
 const plans: SavingPlan[] = [
   {
     id: 'plan-30',
@@ -81,5 +76,3 @@ export function createSeedState(): BankState {
     nextCertificateNo: 1,
   }
 }
-
-export const localAddress = LOCAL_ADDRESS

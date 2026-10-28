@@ -22,11 +22,9 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
       if (!window.ethereum) {
         throw new Error(copy.errorNoMetaMask)
       }
-      if (contractConfigError) throw new Error(copy.errorContractConfig)
-      if (contractConfig) {
-        const { assertConfiguredNetwork } = await import('../contracts/adapter')
-        await assertConfiguredNetwork()
-      }
+      if (contractConfigError || !contractConfig) throw new Error(copy.errorContractConfig)
+      const { assertConfiguredNetwork } = await import('../contracts/adapter')
+      await assertConfiguredNetwork()
       const accounts = (await window.ethereum.request({
         method: 'eth_requestAccounts',
       })) as string[]
