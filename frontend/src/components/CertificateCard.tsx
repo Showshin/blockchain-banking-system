@@ -1,7 +1,7 @@
-import { ArrowClockwise, ArrowRight, ArrowSquareOut, SealCheck } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowRight, ArrowSquareOut, Plus, SealCheck } from '@phosphor-icons/react'
 import { contractConfig } from '../contracts/config'
 import { useI18n } from '../i18n/lang'
-import { depositProgress, interestEarned, isMatured } from '../lib/bank'
+import { depositProgress, interestEarned, isClaimable, isMatured } from '../lib/bank'
 import { nowDate } from '../lib/clock'
 import { daysBetween, formatBps, formatDate, formatUsdc } from '../lib/format'
 import type { Deposit, SavingPlan } from '../types'
@@ -12,23 +12,37 @@ export function CertificateCard({
   plan,
   onWithdraw,
   onRenew,
+  onTopUp,
+  onClaim,
 }: {
   deposit: Deposit
   plan?: SavingPlan
   onWithdraw: (deposit: Deposit) => void
   onRenew: (deposit: Deposit) => void
+  onTopUp: (deposit: Deposit) => void
+  onClaim: (deposit: Deposit) => void
 }) {
   const { t, lang } = useI18n()
   const copy = t.deposits.certificate
+  const claimable = isClaimable(deposit)
   const matured = isMatured(deposit)
-  const progress = depositProgress(deposit)
-  const interest = interestEarned(deposit)
+  const progress = claimable ? 1 : depositProgress(deposit)
+  const interest = claimable ? deposit.pendingInterest : interestEarned(deposit)
   const daysLeft = daysBetween(nowDate(), deposit.maturityAt)
-  const status = matured ? 'matured' : 'active'
+  const status = claimable ? 'pending' : matured ? 'matured' : 'active'
+  const explorerHref =
+    contractConfig?.chainId === 11155111
+      ? 'https://sepolia.etherscan.io/nft/' +
+        contractConfig.coreAddress +
+        '/' +
+        deposit.certificateNo
+      : null
 
-  const progressLabel = matured
-    ? copy.matured
-    : copy.progress + ' · ' + t.common.daysLeft(daysLeft)
+  const progressLabel = claimable
+    ? copy.principalReturned
+    : matured
+      ? copy.matured
+      : copy.progress + ' · ' + t.common.daysLeft(daysLeft)
 
   return (
     <article className="certificate">
@@ -46,13 +60,15 @@ export function CertificateCard({
 
         <div className="mt-8 flex items-start justify-between gap-4 max-[359px]:gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-muted">{copy.principal}</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted">
+              {claimable ? copy.principalReturned : copy.principal}
+            </p>
             <p className="mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-medium leading-none tracking-[-0.06em] tabular-nums">
               {formatUsdc(deposit.principal)}
               <span className="ml-2 text-[11px] font-normal tracking-normal text-muted">USDC</span>
             </p>
             <p className="certificate-interest mt-2 text-xs text-muted">
-              {copy.expectedInterest}{' '}
+              {claimable ? copy.pendingInterest : copy.expectedInterest}{' '}
               <span className="font-medium text-accent">+{formatUsdc(interest)} USDC</span>
             </p>
           </div>
@@ -74,7 +90,9 @@ export function CertificateCard({
             <span
               className={
                 'block h-full rounded-full ' +
-                (matured ? 'certificate-progress-matured' : 'certificate-progress-active')
+                (matured || claimable
+                  ? 'certificate-progress-matured'
+                  : 'certificate-progress-active')
               }
               style={{ width: Math.max(3, progress * 100) + '%' }}
             />
@@ -82,7 +100,18 @@ export function CertificateCard({
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          {matured ? (
+          {claimable ? (
+            <button
+              type="button"
+              className="certificate-claim btn btn-small btn-primary"
+              onClick={() => onClaim(deposit)}
+            >
+              {copy.claim}
+              <span className="btn-icon">
+                <ArrowRight size={13} weight="light" />
+              </span>
+            </button>
+          ) : matured ? (
             <>
               <button
                 type="button"
@@ -104,28 +133,45 @@ export function CertificateCard({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className="certificate-early btn btn-small btn-secondary"
-              onClick={() => onWithdraw(deposit)}
-            >
-              {copy.earlyWithdraw}
-              <span className="text-[10px] text-muted">
-                {copy.penalty} {formatBps(deposit.penaltyBpsAtOpen)}
-              </span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="certificate-early btn btn-small btn-secondary"
+                onClick={() => onWithdraw(deposit)}
+              >
+                {copy.earlyWithdraw}
+                <span className="text-[10px] text-muted">
+                  {copy.penalty} {formatBps(deposit.penaltyBpsAtOpen)}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="certificate-topup btn btn-small btn-secondary"
+                onClick={() => onTopUp(deposit)}
+              >
+                <Plus size={14} weight="light" />
+                {copy.topUp}
+              </button>
+            </>
           )}
-          <a
-            href={contractConfig ? 'https://sepolia.etherscan.io/token/' + contractConfig.coreAddress + '?a=' + deposit.certificateNo : '#'}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto flex items-center gap-1.5 text-[10px] text-muted hover:text-ink transition group cursor-pointer"
-            title="Xem NFT trên Etherscan Sepolia"
-          >
-            <SealCheck size={14} weight="light" />
-            NFT #{String(deposit.certificateNo).padStart(4, '0')}
-            <ArrowSquareOut size={12} weight="light" className="opacity-0 group-hover:opacity-100 transition" />
-          </a>
+          {explorerHref ? (
+            <a
+              href={explorerHref}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-auto flex items-center gap-1.5 text-[10px] text-muted hover:text-ink transition group cursor-pointer"
+              title={copy.etherscanTitle}
+            >
+              <SealCheck size={14} weight="light" />
+              NFT #{String(deposit.certificateNo).padStart(4, '0')}
+              <ArrowSquareOut size={12} weight="light" className="opacity-0 group-hover:opacity-100 transition" />
+            </a>
+          ) : (
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] text-muted">
+              <SealCheck size={14} weight="light" />
+              NFT #{String(deposit.certificateNo).padStart(4, '0')}
+            </span>
+          )}
         </div>
       </div>
     </article>

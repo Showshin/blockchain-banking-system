@@ -1,30 +1,30 @@
 {
   "network": "testnet",
   "chainId": 11155111,
-  "deploymentBlock": 12010637,
-  "completedBlock": 12010648,
-  "deployedAt": "2026-10-28T06:54:01.768Z",
+  "deploymentBlock": 12017324,
+  "completedBlock": 12017340,
+  "deployedAt": "2026-10-29T05:11:24.000Z",
   "deployer": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
   "feeReceiver": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
   "explorerBaseUrl": "https://sepolia.etherscan.io",
   "contracts": {
-    "MockUSDC": "0x4A5ee598558e49c78a545417B38251566482785c",
-    "VaultManager": "0x63C7e3c9c3F70b1692f13ad21252ba3a02e3bEe5",
-    "SavingCore": "0xD2297a633D35f2F6E78f4eAD8BF214E241704ECf"
+    "MockUSDC": "0x56790fee15a3E0A7921ccc7852a07b8C1E0C8289",
+    "VaultManager": "0x14BB3b3579f00087127d998d1362f8082F2cDD10",
+    "SavingCore": "0x215b88d623B6c66fFa1c4778503C2525ff03bc89"
   },
   "transactions": {
-    "MockUSDC": "0x7ba392b5f435a79c171f083c26cfd973857d2c1aa67a857d52d5ac05a56f92d8",
-    "VaultManager": "0x13fd5a563134fb97cf6fd95914523b8ff0b2e2e8a20b3ea128505444b1567b7f",
-    "SavingCore": "0x5caa4e780a774f9149f1f086dc5fd8656c84fb5bafdb2bd2d636fba9230d379e",
-    "grantCoreRole": "0xae219106eb7054964bbf0770e35653b2cd70eee7082a86d3c2c2078ec9b04b6a",
-    "mint": "0xf3472209a703422230150d8bf708ba1d6de4faf2442bd30a350f0d5ad4a98927",
-    "approveVault": "0x2542eee7b3942aab6ed3efdfe84830712e9ea3a231bb7f4db61362527a34890f",
-    "fundVault": "0x041e7924f4e73e6cb89165d47058d5f336326c1aa5ab809e9008d05f57add10c",
+    "MockUSDC": "0xdcf00838937f96258eecb965d0076bccc62b0f72fb4ba78caf56d761a5e52237",
+    "VaultManager": "0x148e12d455b2568ee854305141754d0387fc6e0041ea45809194b61d92c1a41c",
+    "SavingCore": "0x7d5318a2070fdb1969353d6c071255be35fc15e0f9f9b06bdc4eb2adfbae3872",
+    "grantCoreRole": "0x017d042a5083ba6120d95309692cc641efb438eb83e1dd1ae7b857e643ce30d2",
+    "mint": "0x43118cc9b799f1ce1f26f1518ba06af37cf22f63ddb4353c9c667a1fa1ebd884",
+    "approveVault": "0xf4322888837fc48332287880645412a408d5519160cf46aa43e5b935e185188c",
+    "fundVault": "0x4fb9d8b7aa2a355560c1ca38bce1a33f990b2b0ab793274624fac54416efa8cb",
     "createPlans": [
-      "0xa832138f073b5bd5d30d6e237cc72d5e08528feaf1a244a0144cedcda6788ef9",
-      "0xdbbaadcec657a6c86cfbf67102824d0f828d01ab34b2a4626328756858e5bf88",
-      "0xb8bd1ed18d4024820bd732df388a22e2ab0187d764f5e16eebaeecd1b448e1f2",
-      "0x37d735f9574faaed18d6ae3f5633eab5dc4d2ba23ec69e58dbdedba1f5bdaea4"
+      "0x7d78005cd351781aa72c80fab6367b62c3807b121914a2976f4c883266636f66",
+      "0x611fdd6f38fb9407d8cbe7b4edbbc116cb461990ad0a1140fdaa7b2cf56984ef",
+      "0x18a3c4280721cf069aea12040eca46ebac1a135340c67b4932ed00ac5058ef48",
+      "0xfaaa1fb65f11622e3e76dd4002b1ae9ba42ce6c7debff6004324d380dfbe6283"
     ]
   },
   "personalVariant": {

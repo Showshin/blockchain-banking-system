@@ -23,6 +23,7 @@ async function main() {
   if (chain.chainId === 1n) {
     throw new Error("Refusing to deploy to Ethereum mainnet. Select an explicit testnet network.");
   }
+  const txOverrides = networkName === "testnet" ? { gasPrice: 100_000_000n } : {};
 
   const configuredFeeReceiver = process.env.FEE_RECEIVER_ADDRESS?.trim();
   const feeReceiver = configuredFeeReceiver
@@ -30,30 +31,32 @@ async function main() {
     : (signers[1]?.address ?? deployer.address);
   const deploymentBlock = await ethers.provider.getBlockNumber();
 
-  const token = await ethers.deployContract("MockUSDC");
+  const token = await ethers.deployContract("MockUSDC", [], txOverrides);
   await token.waitForDeployment();
   const tokenDeploymentTx = token.deploymentTransaction();
 
-  const vault = await ethers.deployContract("VaultManager", [
-    token.target,
-    deployer.address,
-    feeReceiver,
-  ]);
+  const vault = await ethers.deployContract(
+    "VaultManager",
+    [token.target, deployer.address, feeReceiver],
+    txOverrides,
+  );
   await vault.waitForDeployment();
   const vaultDeploymentTx = vault.deploymentTransaction();
 
-  const core = await ethers.deployContract("SavingCore", [
-    token.target,
-    vault.target,
-    GRACE_PERIOD_SECONDS,
-  ]);
+  const core = await ethers.deployContract(
+    "SavingCore",
+    [token.target, vault.target, GRACE_PERIOD_SECONDS],
+    txOverrides,
+  );
   await core.waitForDeployment();
   const coreDeploymentTx = core.deploymentTransaction();
 
-  const coreRoleTx = await (await vault.grantRole(await vault.CORE_ROLE(), core.target)).wait();
-  const mintTx = await (await token.mint(deployer.address, USDC(150_000))).wait();
-  const approveTx = await (await token.approve(vault.target, MaxUint256)).wait();
-  const fundTx = await (await vault.fundVault(USDC(100_000))).wait();
+  const coreRoleTx = await (
+    await vault.grantRole(await vault.CORE_ROLE(), core.target, txOverrides)
+  ).wait();
+  const mintTx = await (await token.mint(deployer.address, USDC(150_000), txOverrides)).wait();
+  const approveTx = await (await token.approve(vault.target, MaxUint256, txOverrides)).wait();
+  const fundTx = await (await vault.fundVault(USDC(100_000), txOverrides)).wait();
 
   const planInputs = [
     { tenorDays: 30, aprBps: 175, min: USDC(100), max: USDC(25_000), penaltyBps: 200 },
@@ -77,6 +80,7 @@ async function main() {
         plan.min,
         plan.max,
         plan.penaltyBps,
+        txOverrides,
       )
     ).wait();
     planTransactions.push(receipt.hash);

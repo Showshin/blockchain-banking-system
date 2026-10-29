@@ -3,16 +3,19 @@ dist/
 coverage/
 artifacts/
 cache/
+# Local working notes; intentionally not part of the submitted repo
 docs/
 .env
 .env.*
 !.env.example
+contracts/deployments/localhost.json
 *.log
 .DS_Store
 
 # Editor and OS
 .vscode/
 .idea/
+.commandcode/
 Thumbs.db
 
 # Environment & secrets

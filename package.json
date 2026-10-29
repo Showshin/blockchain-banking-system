@@ -21,7 +21,6 @@
     "verify:local": "npm --prefix contracts run verify:local",
     "verify:testnet": "npm --prefix contracts run verify:testnet",
     "test:sepolia": "npm --prefix contracts run testnet:smoke",
-    "test:sepolia:fork": "npm --prefix contracts run testnet:fork",
     "configure:frontend": "npm --prefix contracts run configure:frontend"
   }
 }

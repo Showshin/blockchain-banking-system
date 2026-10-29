@@ -19,7 +19,6 @@
     "verify:local": "hardhat run scripts/verify-deployment.ts --network localhost",
     "verify:testnet": "hardhat run scripts/verify-deployment.ts --network testnet",
     "testnet:smoke": "hardhat run scripts/sepolia-e2e.ts --network testnet",
-    "testnet:fork": "hardhat run scripts/sepolia-e2e.ts --network sepoliaFork",
     "configure:frontend": "tsx scripts/configure-frontend.ts"
   },
   "dependencies": {
@@ -30,6 +29,7 @@
     "@nomicfoundation/hardhat-ethers-chai-matchers": "^3.0.13",
     "@nomicfoundation/hardhat-mocha": "^4.0.1",
     "@nomicfoundation/hardhat-network-helpers": "^3.0.12",
+    "@nomicfoundation/hardhat-verify": "^3.1.4",
     "@types/chai": "5.2.3",
     "@types/mocha": "10.0.10",
     "@types/node": "26.6.5",

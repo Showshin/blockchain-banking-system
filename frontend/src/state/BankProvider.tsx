@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { hasContractConfig } from '../contracts/config'
-import { createSeedState } from '../data/seed'
 import { useI18n } from '../i18n/lang'
 import type { Messages } from '../i18n/messages'
 import { isMatured } from '../lib/bank'
 import type { BankState, Deposit } from '../types'
-import { BankContext, type BankContextValue, type WithdrawReceipt } from './bank'
+import {
+  BankContext,
+  type BankContextValue,
+  type ClaimReceipt,
+  type TopUpReceipt,
+  type WithdrawReceipt,
+} from './bank'
 
 
-function initialBankState(): BankState {
-  return createSeedState()
+function emptyBankState(): BankState {
+  return {
+    plans: [],
+    deposits: [],
+    wallet: { connected: false, mode: null, address: null, balance: 0 },
+    vault: { balance: 0 },
+    nextCertificateNo: 1,
+  }
 }
 
 function causeMessage(cause: unknown): string {
@@ -28,6 +39,8 @@ function translateChainError(cause: unknown, t: Messages): Error {
     ['user rejected', t.errors.walletRejected],
     ['Core: below minimum', t.errors.minimumRevert],
     ['Core: above maximum', t.errors.maximumRevert],
+    ['Core: invalid partial amount', t.errors.invalidPartialAmount],
+    ['Core: remaining below minimum', t.errors.remainingBelowMinimum],
     ['Core: insufficient balance', t.errors.insufficientBalance],
     ['ERC20InsufficientBalance', t.errors.insufficientBalance],
     ['Vault: insufficient interest', t.errors.vaultShortfall],
@@ -37,6 +50,12 @@ function translateChainError(cause: unknown, t: Messages): Error {
     ['Core: not certificate owner', t.errors.notCertificateOwner],
     ['Core: plan unavailable', t.errors.planUnavailable],
     ['Core: system paused', t.errors.systemPaused],
+    ['Core: no pending interest', t.errors.noPendingInterest],
+    ['Core: invalid amount', t.errors.invalidAmount],
+    ['Vault: interest not reserved', t.errors.interestNotReserved],
+    ['Vault: reserved interest', t.errors.vaultProtected],
+    ['Vault: undercollateralized', t.errors.vaultProtected],
+    ['Vault: release exceeds reserved', t.errors.vaultProtected],
   ]
   const match = mapping.find(([fragment]) => message.includes(fragment))
   if (match) return new Error(match[1])
@@ -48,7 +67,7 @@ function translateChainError(cause: unknown, t: Messages): Error {
 
 export function BankProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
-  const [state, setState] = useState<BankState>(initialBankState)
+  const [state, setState] = useState<BankState>(emptyBankState)
   const [chainLoading, setChainLoading] = useState(false)
   const [chainError, setChainError] = useState<string | null>(null)
   const address = state.wallet.address
@@ -138,6 +157,30 @@ export function BankProvider({ children }: { children: ReactNode }) {
     [address, refreshChain, state.deposits, state.wallet.connected, t],
   )
 
+  const withdrawDepositPartial = useCallback(
+    async (depositId: string, amount: number): Promise<WithdrawReceipt> => {
+      if (!state.wallet.connected) throw new Error(t.errors.walletRequired)
+      const deposit = state.deposits.find((candidate) => candidate.id === depositId)
+      if (!deposit || deposit.status !== 'active') throw new Error(t.errors.depositInactive)
+      if (!Number.isFinite(amount) || amount <= 0 || amount >= deposit.principal) {
+        throw new Error(t.errors.invalidPartialAmount)
+      }
+
+      if (address) {
+        try {
+          const { withdrawChainDepositPartial } = await import('../contracts/adapter')
+          const result = await withdrawChainDepositPartial(address, deposit.id, amount)
+          await refreshChain()
+          return result.receipt
+        } catch (cause) {
+          throw translateChainError(cause, t)
+        }
+      }
+      throw new Error(t.errors.walletRequired)
+    },
+    [address, refreshChain, state.deposits, state.wallet.connected, t],
+  )
+
   const renewDeposit = useCallback(
     async (depositId: string, newPlanId: string): Promise<Deposit> => {
       if (!state.wallet.connected) throw new Error(t.errors.walletRequired)
@@ -162,32 +205,73 @@ export function BankProvider({ children }: { children: ReactNode }) {
     [address, refreshChain, state.deposits, state.plans, state.wallet.connected, t],
   )
 
-  const connectWallet = useCallback((nextAddress: string) => {
-    setState((current) => {
-      const base =
-        hasContractConfig
-          ? {
-              ...createSeedState(),
-              plans: [],
-              deposits: [],
-              wallet: { ...createSeedState().wallet, balance: 0 },
-              vault: { balance: 0 },
-              nextCertificateNo: 1,
-            }
-          : current
-      return {
-        ...base,
-        wallet: { ...base.wallet, connected: true, mode: 'metamask', address: nextAddress },
+  const topUpDeposit = useCallback(
+    async (depositId: string, amount: number): Promise<TopUpReceipt> => {
+      if (!state.wallet.connected) throw new Error(t.errors.walletRequired)
+      const deposit = state.deposits.find((candidate) => candidate.id === depositId)
+      if (!deposit || deposit.status !== 'active') throw new Error(t.errors.depositInactive)
+      if (isMatured(deposit)) throw new Error(t.errors.topUpMatured)
+      const plan = state.plans.find((candidate) => candidate.id === deposit.planId)
+      if (!plan) throw new Error(t.errors.planUnavailable)
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error(t.errors.invalidAmount)
+      if (deposit.principal + amount > plan.maxDeposit) {
+        throw new Error(t.errors.maxAmount(plan.maxDeposit.toLocaleString('en-US')))
       }
+      if (amount > state.wallet.balance) throw new Error(t.errors.insufficientBalance)
+
+      if (address) {
+        try {
+          const { topUpChainDeposit } = await import('../contracts/adapter')
+          const result = await topUpChainDeposit(address, deposit.id, amount)
+          await refreshChain()
+          return result.receipt
+        } catch (cause) {
+          throw translateChainError(cause, t)
+        }
+      }
+      throw new Error(t.errors.walletRequired)
+    },
+    [address, refreshChain, state.deposits, state.plans, state.wallet.balance, state.wallet.connected, t],
+  )
+
+  const claimInterest = useCallback(
+    async (depositId: string): Promise<ClaimReceipt> => {
+      if (!state.wallet.connected) throw new Error(t.errors.walletRequired)
+      const deposit = state.deposits.find((candidate) => candidate.id === depositId)
+      if (
+        !deposit ||
+        deposit.status !== 'principal-withdrawn' ||
+        deposit.pendingInterest <= 0
+      ) {
+        throw new Error(t.errors.noPendingInterest)
+      }
+
+      if (address) {
+        try {
+          const { claimChainInterest } = await import('../contracts/adapter')
+          const result = await claimChainInterest(address, deposit.id)
+          await refreshChain()
+          return result
+        } catch (cause) {
+          throw translateChainError(cause, t)
+        }
+      }
+      throw new Error(t.errors.walletRequired)
+    },
+    [address, refreshChain, state.deposits, state.wallet.connected, t],
+  )
+
+  const connectWallet = useCallback((nextAddress: string) => {
+    setChainError(null)
+    setState({
+      ...emptyBankState(),
+      wallet: { connected: true, mode: 'metamask', address: nextAddress, balance: 0 },
     })
   }, [])
 
   const disconnectWallet = useCallback(() => {
     setChainError(null)
-    setState(() => ({
-      ...createSeedState(),
-      wallet: { ...createSeedState().wallet, connected: false, mode: null, address: null },
-    }))
+    setState(emptyBankState())
   }, [])
 
   useEffect(() => {
@@ -223,7 +307,10 @@ export function BankProvider({ children }: { children: ReactNode }) {
       chainError,
       openDeposit,
       withdrawDeposit,
+      withdrawDepositPartial,
       renewDeposit,
+      topUpDeposit,
+      claimInterest,
       connectWallet,
       disconnectWallet,
       refreshChain,
@@ -235,7 +322,10 @@ export function BankProvider({ children }: { children: ReactNode }) {
       chainError,
       openDeposit,
       withdrawDeposit,
+      withdrawDepositPartial,
       renewDeposit,
+      topUpDeposit,
+      claimInterest,
       connectWallet,
       disconnectWallet,
       refreshChain,

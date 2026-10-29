@@ -24,7 +24,8 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         Active,
         Withdrawn,
         ManualRenewed,
-        AutoRenewed
+        AutoRenewed,
+        PrincipalWithdrawn
     }
 
     struct SavingPlan {
@@ -45,6 +46,7 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         uint64 openedAt;
         uint64 maturityAt;
         DepositStatus status;
+        uint256 principalSeconds;
     }
 
     IERC20 public immutable asset;
@@ -53,6 +55,7 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
 
     mapping(uint256 planId => SavingPlan) public plans;
     mapping(uint256 depositId => Deposit) public deposits;
+    mapping(uint256 depositId => uint256 amount) public pendingInterest;
     uint256 public nextPlanId = 1;
     uint256 public nextDepositId = 1;
 
@@ -79,6 +82,22 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         uint256 indexed newDepositId,
         uint256 newPrincipal,
         uint256 indexed newPlanId
+    );
+    event PartialEarlyWithdrawn(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 amount,
+        uint256 penalty,
+        uint256 remainingPrincipal
+    );
+    event InterestDeferred(uint256 indexed depositId, address indexed owner, uint256 amount);
+    event InterestClaimed(uint256 indexed depositId, address indexed owner, uint256 amount);
+    event DepositToppedUp(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 amount,
+        uint256 newPrincipal,
+        uint256 interestAdded
     );
 
     constructor(address asset_, address vault_, uint256 gracePeriod_) ERC721("TICH Deposit Certificate", "TICHDEP") {
@@ -159,12 +178,62 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         uint256 interest = _interestFor(deposit);
         deposit.status = DepositStatus.Withdrawn;
 
+        bool interestDeferred;
         if (interest > 0) {
-            vault.payInterest(msg.sender, interest);
+            try vault.payInterest(msg.sender, interest) {
+                // The vault released this interest reservation when it paid.
+            } catch {
+                // C1: the principal must never be locked behind an underfunded vault.
+                deposit.status = DepositStatus.PrincipalWithdrawn;
+                pendingInterest[depositId] = interest;
+                interestDeferred = true;
+            }
         }
         asset.safeTransfer(msg.sender, deposit.principal);
 
         emit Withdrawn(depositId, msg.sender, deposit.principal, interest, false);
+        if (interestDeferred) {
+            emit InterestDeferred(depositId, msg.sender, interest);
+        }
+    }
+
+    function claimInterest(uint256 depositId) external nonReentrant {
+        Deposit storage deposit = deposits[depositId];
+        require(deposit.status == DepositStatus.PrincipalWithdrawn, "Core: no pending interest");
+        require(ownerOf(depositId) == msg.sender, "Core: not certificate owner");
+        require(!vault.paused(), "Core: system paused");
+
+        uint256 amount = pendingInterest[depositId];
+        require(amount > 0, "Core: no pending interest");
+        pendingInterest[depositId] = 0;
+        vault.payInterest(msg.sender, amount);
+
+        emit InterestClaimed(depositId, msg.sender, amount);
+    }
+
+    function topUpDeposit(uint256 depositId, uint256 amount) external nonReentrant {
+        Deposit storage deposit = deposits[depositId];
+        _requireActiveOwner(depositId, deposit);
+        require(block.timestamp < deposit.maturityAt, "Core: already matured");
+        require(!vault.paused(), "Core: system paused");
+        require(amount > 0, "Core: invalid amount");
+
+        uint256 newPrincipal = deposit.principal + amount;
+        SavingPlan storage plan = plans[deposit.planId];
+        require(plan.maxDeposit == 0 || newPrincipal <= plan.maxDeposit, "Core: above maximum");
+
+        uint256 beforeInterest = _interestFor(deposit);
+        uint256 remainingSeconds = uint256(deposit.maturityAt) - block.timestamp;
+        asset.safeTransferFrom(msg.sender, address(this), amount);
+
+        deposit.principal = newPrincipal;
+        deposit.principalSeconds += amount * remainingSeconds;
+        uint256 interestAdded = _interestFor(deposit) - beforeInterest;
+        if (interestAdded > 0) {
+            vault.reserveInterest(interestAdded);
+        }
+
+        emit DepositToppedUp(depositId, msg.sender, amount, newPrincipal, interestAdded);
     }
 
     function earlyWithdraw(uint256 depositId) external nonReentrant {
@@ -173,9 +242,13 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         require(block.timestamp < deposit.maturityAt, "Core: already matured");
         require(!vault.paused(), "Core: system paused");
 
+        uint256 interestReserved = _interestFor(deposit);
         uint256 penalty = _penaltyFor(deposit);
         uint256 payout = deposit.principal - penalty;
         deposit.status = DepositStatus.Withdrawn;
+        if (interestReserved > 0) {
+            vault.releaseInterest(interestReserved);
+        }
 
         if (penalty > 0) {
             asset.safeTransfer(vault.feeReceiver(), penalty);
@@ -185,6 +258,44 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
         }
 
         emit Withdrawn(depositId, msg.sender, deposit.principal, 0, true);
+    }
+
+    function earlyWithdrawPartial(uint256 depositId, uint256 amount) external nonReentrant {
+        Deposit storage deposit = deposits[depositId];
+        _requireActiveOwner(depositId, deposit);
+        require(block.timestamp < deposit.maturityAt, "Core: already matured");
+        require(!vault.paused(), "Core: system paused");
+        require(amount > 0 && amount < deposit.principal, "Core: invalid partial amount");
+
+        uint256 remainingPrincipal = deposit.principal - amount;
+        require(
+            remainingPrincipal >= plans[deposit.planId].minDeposit,
+            "Core: remaining below minimum"
+        );
+
+        uint256 beforeInterest = _interestFor(deposit);
+        uint256 previousPrincipal = deposit.principal;
+        uint256 penalty = _penaltyForAmount(amount, deposit.penaltyBpsAtOpen);
+        uint256 payout = amount - penalty;
+        deposit.principal = remainingPrincipal;
+        deposit.principalSeconds = Math.mulDiv(
+            deposit.principalSeconds,
+            remainingPrincipal,
+            previousPrincipal
+        );
+        uint256 afterInterest = _interestFor(deposit);
+        if (beforeInterest > afterInterest) {
+            vault.releaseInterest(beforeInterest - afterInterest);
+        }
+
+        if (penalty > 0) {
+            asset.safeTransfer(vault.feeReceiver(), penalty);
+        }
+        if (payout > 0) {
+            asset.safeTransfer(msg.sender, payout);
+        }
+
+        emit PartialEarlyWithdrawn(depositId, msg.sender, amount, penalty, remainingPrincipal);
     }
 
     function renewDeposit(uint256 depositId, uint256 newPlanId) external nonReentrant returns (uint256 newDepositId) {
@@ -283,11 +394,17 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
             tenorDays: tenorDays,
             openedAt: uint64(block.timestamp),
             maturityAt: maturityAt,
-            status: DepositStatus.Active
+            status: DepositStatus.Active,
+            principalSeconds: principal * uint256(tenorDays) * 1 days
         });
 
         _safeMint(owner, depositId);
         emit DepositOpened(depositId, owner, planId, principal, maturityAt, aprBpsAtOpen);
+
+        uint256 interest = _interestFor(deposits[depositId]);
+        if (interest > 0) {
+            vault.reserveInterest(interest);
+        }
     }
 
     function _requireActiveOwner(uint256 depositId, Deposit storage deposit) internal view {
@@ -298,13 +415,17 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
     function _interestFor(Deposit storage deposit) internal view returns (uint256) {
         return
             Math.mulDiv(
-                deposit.principal,
-                uint256(deposit.aprBpsAtOpen) * uint256(deposit.tenorDays) * 1 days,
+                deposit.principalSeconds,
+                uint256(deposit.aprBpsAtOpen),
                 SECONDS_PER_YEAR * MAX_BPS
             );
     }
 
+    function _penaltyForAmount(uint256 amount, uint16 penaltyBps) internal pure returns (uint256) {
+        return Math.mulDiv(amount, penaltyBps, MAX_BPS);
+    }
+
     function _penaltyFor(Deposit storage deposit) internal view returns (uint256) {
-        return Math.mulDiv(deposit.principal, deposit.penaltyBpsAtOpen, MAX_BPS);
+        return _penaltyForAmount(deposit.principal, deposit.penaltyBpsAtOpen);
     }
 }

@@ -16,12 +16,14 @@ import {
 const { ethers, networkHelpers } = await network.create();
 const { time } = networkHelpers;
 const deployBankFixture = () => createBankFixture(ethers);
+const deployShortVaultFixture = () => createBankFixture(ethers, { vaultFunding: USDC(1) });
 const loadFixture = networkHelpers.loadFixture;
 
 const ACTIVE = 1n;
 const WITHDRAWN = 2n;
 const MANUAL_RENEWED = 3n;
 const AUTO_RENEWED = 4n;
+const PRINCIPAL_WITHDRAWN = 5n;
 
 describe("SavingCore", function () {
   describe("plans", function () {
@@ -252,6 +254,210 @@ describe("SavingCore", function () {
       );
     });
 
+    describe("partial early withdrawals", function () {
+      it("withdraws part early, charges penalty on that part and keeps the rest active", async function () {
+        const { core, token, vault, depositor, feeAccount } = await loadFixture(deployBankFixture);
+        const principal = USDC(1_000);
+        const amount = USDC(200);
+        const penalty = USDC(8);
+        const { depositId, deposit } = await openDeposit(core, depositor, principal);
+
+        await time.increase(10 * 86_400);
+        const userBefore = await token.balanceOf(depositor.address);
+        const feeBefore = await token.balanceOf(feeAccount.address);
+        const vaultBefore = await token.balanceOf(vault.target);
+
+        await expect(withSigner(core, depositor).earlyWithdrawPartial(depositId, amount))
+          .to.emit(core, "PartialEarlyWithdrawn")
+          .withArgs(depositId, depositor.address, amount, penalty, principal - amount);
+
+        const after = await core.deposits(depositId);
+        expect(after.principal).to.equal(principal - amount);
+        expect(after.status).to.equal(ACTIVE);
+        expect(after.aprBpsAtOpen).to.equal(BigInt(DEFAULT_APR_BPS));
+        expect(after.penaltyBpsAtOpen).to.equal(BigInt(DEFAULT_PENALTY_BPS));
+        expect(after.tenorDays).to.equal(BigInt(DEFAULT_TENOR_DAYS));
+        expect(after.maturityAt).to.equal(deposit.maturityAt);
+        expect(await core.ownerOf(depositId)).to.equal(depositor.address);
+        expect(await token.balanceOf(depositor.address)).to.equal(userBefore + amount - penalty);
+        expect(await token.balanceOf(feeAccount.address)).to.equal(feeBefore + penalty);
+        expect(await token.balanceOf(vault.target)).to.equal(vaultBefore);
+      });
+
+      it("pays maturity interest only on the remaining principal", async function () {
+        const { core, token, vault, depositor } = await loadFixture(deployBankFixture);
+        const principal = USDC(1_000);
+        const amount = USDC(200);
+        const remaining = principal - amount;
+        const { depositId, deposit } = await openDeposit(core, depositor, principal);
+
+        await withSigner(core, depositor).earlyWithdrawPartial(depositId, amount);
+        const expectedInterest =
+          (remaining * BigInt(DEFAULT_APR_BPS) * BigInt(DEFAULT_TENOR_DAYS)) / (365n * 10_000n);
+        expect(await core.interestAtMaturity(depositId)).to.equal(expectedInterest);
+
+        await time.increaseTo(Number(deposit.maturityAt));
+        const userBefore = await token.balanceOf(depositor.address);
+        const vaultBefore = await token.balanceOf(vault.target);
+
+        await expect(withSigner(core, depositor).withdrawAtMaturity(depositId))
+          .to.emit(core, "Withdrawn")
+          .withArgs(depositId, depositor.address, remaining, expectedInterest, false);
+
+        expect(await token.balanceOf(depositor.address)).to.equal(
+          userBefore + remaining + expectedInterest,
+        );
+        expect(await token.balanceOf(vault.target)).to.equal(vaultBefore - expectedInterest);
+        expect((await core.deposits(depositId)).status).to.equal(WITHDRAWN);
+      });
+
+      it("rejects a partial withdrawal that leaves less than the plan minimum", async function () {
+        const { core, depositor } = await loadFixture(deployBankFixture);
+        const planId = await core.nextPlanId();
+        await core.createPlan(90, 225, USDC(500), USDC(100_000), 400);
+        const { depositId } = await openDeposit(core, depositor, USDC(500), planId);
+
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: remaining below minimum");
+        expect((await core.deposits(depositId)).principal).to.equal(USDC(500));
+
+        await withSigner(core, depositor).earlyWithdraw(depositId);
+        expect((await core.deposits(depositId)).status).to.equal(WITHDRAWN);
+      });
+
+      it("allows a partial withdrawal that leaves exactly the plan minimum", async function () {
+        const { core, depositor } = await loadFixture(deployBankFixture);
+        const planId = await core.nextPlanId();
+        await core.createPlan(90, 225, USDC(500), USDC(100_000), 400);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000), planId);
+
+        await expect(withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(500)))
+          .to.emit(core, "PartialEarlyWithdrawn")
+          .withArgs(depositId, depositor.address, USDC(500), USDC(20), USDC(500));
+
+        expect((await core.deposits(depositId)).principal).to.equal(USDC(500));
+        expect((await core.deposits(depositId)).status).to.equal(ACTIVE);
+      });
+
+      it("rejects zero, full, over-principal and post-maturity partial withdrawals", async function () {
+        const { core, depositor } = await loadFixture(deployBankFixture);
+        const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, 0),
+        ).to.be.revertedWith("Core: invalid partial amount");
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(1_000)),
+        ).to.be.revertedWith("Core: invalid partial amount");
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(1_001)),
+        ).to.be.revertedWith("Core: invalid partial amount");
+
+        await time.increaseTo(Number(deposit.maturityAt));
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: already matured");
+      });
+
+      it("keeps partial withdrawal owner-only and active-only", async function () {
+        const { core, depositor, outsider } = await loadFixture(deployBankFixture);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+
+        await expect(
+          withSigner(core, outsider).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: not certificate owner");
+
+        await withSigner(core, depositor).earlyWithdraw(depositId);
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: deposit inactive");
+      });
+
+      it("lets the current NFT owner partially withdraw after a transfer", async function () {
+        const { core, depositor, recipient } = await loadFixture(deployBankFixture);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+        await withSigner(core, depositor).transferFrom(
+          depositor.address,
+          recipient.address,
+          depositId,
+        );
+
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: not certificate owner");
+        await withSigner(core, recipient).earlyWithdrawPartial(depositId, USDC(100));
+
+        expect((await core.deposits(depositId)).principal).to.equal(USDC(900));
+        expect(await core.ownerOf(depositId)).to.equal(recipient.address);
+      });
+
+      it("blocks partial early withdrawal while paused", async function () {
+        const { core, vault, admin, depositor } = await loadFixture(deployBankFixture);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+        await withSigner(vault, admin).pause();
+
+        await expect(
+          withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100)),
+        ).to.be.revertedWith("Core: system paused");
+
+        await withSigner(vault, admin).unpause();
+        await withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(100));
+        expect((await core.deposits(depositId)).principal).to.equal(USDC(900));
+      });
+
+      it("returns the full withdrawn part when the plan penalty is zero", async function () {
+        const { core, token, depositor, feeAccount } = await loadFixture(deployBankFixture);
+        const planId = await core.nextPlanId();
+        await core.createPlan(30, 100, 0, 0, 0);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000), planId);
+        const userBefore = await token.balanceOf(depositor.address);
+        const feeBefore = await token.balanceOf(feeAccount.address);
+
+        await expect(withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(400)))
+          .to.emit(core, "PartialEarlyWithdrawn")
+          .withArgs(depositId, depositor.address, USDC(400), 0n, USDC(600));
+
+        expect(await token.balanceOf(depositor.address)).to.equal(userBefore + USDC(400));
+        expect(await token.balanceOf(feeAccount.address)).to.equal(feeBefore);
+      });
+
+      it("sends the whole withdrawn part to the fee receiver at 100% penalty", async function () {
+        const { core, token, depositor, feeAccount } = await loadFixture(deployBankFixture);
+        const planId = await core.nextPlanId();
+        await core.createPlan(30, 100, 0, 0, 10_000);
+        const { depositId } = await openDeposit(core, depositor, USDC(1_000), planId);
+        const userBefore = await token.balanceOf(depositor.address);
+        const feeBefore = await token.balanceOf(feeAccount.address);
+
+        await expect(withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(400)))
+          .to.emit(core, "PartialEarlyWithdrawn")
+          .withArgs(depositId, depositor.address, USDC(400), USDC(400), USDC(600));
+
+        expect(await token.balanceOf(depositor.address)).to.equal(userBefore);
+        expect(await token.balanceOf(feeAccount.address)).to.equal(feeBefore + USDC(400));
+        expect((await core.deposits(depositId)).principal).to.equal(USDC(600));
+      });
+
+      it("charges a later full early withdrawal on the remaining principal", async function () {
+        const { core, token, depositor, feeAccount } = await loadFixture(deployBankFixture);
+        const principal = USDC(1_000);
+        const partial = USDC(200);
+        const { depositId } = await openDeposit(core, depositor, principal);
+        const userBefore = await token.balanceOf(depositor.address);
+        const feeBefore = await token.balanceOf(feeAccount.address);
+
+        await withSigner(core, depositor).earlyWithdrawPartial(depositId, partial);
+        await expect(withSigner(core, depositor).earlyWithdraw(depositId))
+          .to.emit(core, "Withdrawn")
+          .withArgs(depositId, depositor.address, principal - partial, 0, true);
+
+        expect(await token.balanceOf(depositor.address)).to.equal(userBefore + USDC(960));
+        expect(await token.balanceOf(feeAccount.address)).to.equal(feeBefore + USDC(40));
+        expect((await core.deposits(depositId)).status).to.equal(WITHDRAWN);
+      });
+    });
+
     it("allows a zero-penalty plan to return the full principal early", async function () {
       const { core, token, depositor, feeAccount } = await loadFixture(deployBankFixture);
       const planId = await core.nextPlanId();
@@ -304,16 +510,224 @@ describe("SavingCore", function () {
       expect(await token.balanceOf(recipient.address)).to.be.greaterThan(recipientBefore);
     });
 
-    it("reverts without changing status when the vault cannot pay interest", async function () {
-      const { core, vault, admin, depositor } = await loadFixture(deployBankFixture);
+    it("pays principal and defers interest when the vault cannot pay", async function () {
+      const { core, token, vault, depositor } = await loadFixture(deployShortVaultFixture);
+      const principal = USDC(1_000);
+      const { depositId, deposit } = await openDeposit(core, depositor, principal);
+      const interest = await core.interestAtMaturity(depositId);
+      await time.increaseTo(Number(deposit.maturityAt));
+      const userBefore = await token.balanceOf(depositor.address);
+
+      const tx = withSigner(core, depositor).withdrawAtMaturity(depositId);
+      await expect(tx)
+        .to.emit(core, "Withdrawn")
+        .withArgs(depositId, depositor.address, principal, interest, false);
+      await expect(tx)
+        .to.emit(core, "InterestDeferred")
+        .withArgs(depositId, depositor.address, interest);
+
+      expect(await token.balanceOf(depositor.address)).to.equal(userBefore + principal);
+      expect((await core.deposits(depositId)).status).to.equal(PRINCIPAL_WITHDRAWN);
+      expect(await core.pendingInterest(depositId)).to.equal(interest);
+      expect(await vault.reservedInterest()).to.equal(interest);
+    });
+
+    it("lets the owner claim deferred interest once the vault is funded", async function () {
+      const { core, token, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      const interest = await core.interestAtMaturity(depositId);
+
+      await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
+        "Core: no pending interest",
+      );
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+      await withSigner(vault, admin).fundVault(USDC(100));
+
+      const userBefore = await token.balanceOf(depositor.address);
+      const reservedBefore = await vault.reservedInterest();
+      await expect(withSigner(core, depositor).claimInterest(depositId))
+        .to.emit(core, "InterestClaimed")
+        .withArgs(depositId, depositor.address, interest);
+
+      expect(await token.balanceOf(depositor.address)).to.equal(userBefore + interest);
+      expect(await core.pendingInterest(depositId)).to.equal(0n);
+      expect(await vault.reservedInterest()).to.equal(reservedBefore - interest);
+      expect((await core.deposits(depositId)).status).to.equal(PRINCIPAL_WITHDRAWN);
+      await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
+        "Core: no pending interest",
+      );
+    });
+
+    it("moves the deferred interest claim with the certificate", async function () {
+      const { core, vault, admin, depositor, recipient } = await loadFixture(
+        deployShortVaultFixture,
+      );
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      const interest = await core.interestAtMaturity(depositId);
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+      await withSigner(core, depositor).transferFrom(
+        depositor.address,
+        recipient.address,
+        depositId,
+      );
+      await withSigner(vault, admin).fundVault(USDC(100));
+
+      await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
+        "Core: not certificate owner",
+      );
+      await expect(withSigner(core, recipient).claimInterest(depositId))
+        .to.emit(core, "InterestClaimed")
+        .withArgs(depositId, recipient.address, interest);
+    });
+
+    it("blocks claiming deferred interest while paused", async function () {
+      const { core, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
       const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
       await time.increaseTo(Number(deposit.maturityAt));
-      await withSigner(vault, admin).withdrawVault(USDC(2_000));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+      await withSigner(vault, admin).fundVault(USDC(100));
+      await withSigner(vault, admin).pause();
+
+      await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
+        "Core: system paused",
+      );
+      await withSigner(vault, admin).unpause();
+      await withSigner(core, depositor).claimInterest(depositId);
+      expect(await core.pendingInterest(depositId)).to.equal(0n);
+    });
+
+    it("keeps a deferred-interest certificate inactive for maturity exit", async function () {
+      const { core, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
 
       await expect(withSigner(core, depositor).withdrawAtMaturity(depositId)).to.be.revertedWith(
-        "Vault: insufficient interest",
+        "Core: deposit inactive",
       );
-      expect((await core.deposits(depositId)).status).to.equal(ACTIVE);
+      await withSigner(vault, admin).fundVault(USDC(100));
+      await withSigner(core, depositor).claimInterest(depositId);
+    });
+  });
+
+  describe("top-ups", function () {
+    it("adds principal with weighted interest and keeps the locked terms", async function () {
+      const { core, token, vault, depositor } = await loadFixture(deployBankFixture);
+      const principal = USDC(1_000);
+      const topUp = USDC(500);
+      const { depositId, deposit } = await openDeposit(core, depositor, principal);
+      const beforeInterest = await core.interestAtMaturity(depositId);
+      const reservedBefore = await vault.reservedInterest();
+      const userBefore = await token.balanceOf(depositor.address);
+      const coreBefore = await token.balanceOf(core.target);
+
+      const at = Number(deposit.openedAt) + 30 * 86_400;
+      await time.setNextBlockTimestamp(at);
+      const remainingSeconds = BigInt(Number(deposit.maturityAt) - at);
+      const weightedSeconds =
+        principal * BigInt(DEFAULT_TENOR_DAYS) * 86_400n + topUp * remainingSeconds;
+      const afterInterest =
+        (weightedSeconds * BigInt(DEFAULT_APR_BPS)) / (365n * 86_400n * 10_000n);
+      const expectedAdded = afterInterest - beforeInterest;
+
+      await expect(withSigner(core, depositor).topUpDeposit(depositId, topUp))
+        .to.emit(core, "DepositToppedUp")
+        .withArgs(depositId, depositor.address, topUp, principal + topUp, expectedAdded);
+
+      const after = await core.deposits(depositId);
+      expect(after.principal).to.equal(principal + topUp);
+      expect(after.principalSeconds).to.equal(weightedSeconds);
+      expect(after.maturityAt).to.equal(deposit.maturityAt);
+      expect(after.aprBpsAtOpen).to.equal(BigInt(DEFAULT_APR_BPS));
+      expect(after.penaltyBpsAtOpen).to.equal(BigInt(DEFAULT_PENALTY_BPS));
+      expect(after.tenorDays).to.equal(BigInt(DEFAULT_TENOR_DAYS));
+      expect(await core.interestAtMaturity(depositId)).to.equal(afterInterest);
+      expect(await vault.reservedInterest()).to.equal(reservedBefore + expectedAdded);
+      expect(await token.balanceOf(depositor.address)).to.equal(userBefore - topUp);
+      expect(await token.balanceOf(core.target)).to.equal(coreBefore + topUp);
+    });
+
+    it("enforces ownership, amount, plan maximum, pause and maturity on top-ups", async function () {
+      const { core, vault, admin, depositor, outsider } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+
+      await expect(
+        withSigner(core, outsider).topUpDeposit(depositId, USDC(100)),
+      ).to.be.revertedWith("Core: not certificate owner");
+      await expect(withSigner(core, depositor).topUpDeposit(depositId, 0)).to.be.revertedWith(
+        "Core: invalid amount",
+      );
+      await expect(
+        withSigner(core, depositor).topUpDeposit(depositId, USDC(99_500)),
+      ).to.be.revertedWith("Core: above maximum");
+
+      await withSigner(vault, admin).pause();
+      await expect(
+        withSigner(core, depositor).topUpDeposit(depositId, USDC(100)),
+      ).to.be.revertedWith("Core: system paused");
+      await withSigner(vault, admin).unpause();
+
+      await time.increaseTo(Number(deposit.maturityAt));
+      await expect(
+        withSigner(core, depositor).topUpDeposit(depositId, USDC(100)),
+      ).to.be.revertedWith("Core: already matured");
+    });
+
+    it("reduces weighted principal pro-rata after a partial early withdrawal", async function () {
+      const { core, token, vault, depositor, feeAccount } = await loadFixture(deployBankFixture);
+      const principal = USDC(1_000);
+      const topUp = USDC(1_000);
+      const { depositId, deposit } = await openDeposit(core, depositor, principal);
+
+      const at = Number(deposit.openedAt) + 30 * 86_400;
+      await time.setNextBlockTimestamp(at);
+      await withSigner(core, depositor).topUpDeposit(depositId, topUp);
+      const topped = await core.deposits(depositId);
+      const beforeInterest = await core.interestAtMaturity(depositId);
+      const reservedBefore = await vault.reservedInterest();
+
+      const amount = USDC(500);
+      const penalty = USDC(20);
+      const remainingPrincipal = principal + topUp - amount;
+      const userBefore = await token.balanceOf(depositor.address);
+      const feeBefore = await token.balanceOf(feeAccount.address);
+      await time.setNextBlockTimestamp(at + 86_400);
+
+      await expect(withSigner(core, depositor).earlyWithdrawPartial(depositId, amount))
+        .to.emit(core, "PartialEarlyWithdrawn")
+        .withArgs(depositId, depositor.address, amount, penalty, remainingPrincipal);
+
+      const after = await core.deposits(depositId);
+      const expectedSeconds = (topped.principalSeconds * remainingPrincipal) / (principal + topUp);
+      const afterInterest =
+        (expectedSeconds * BigInt(DEFAULT_APR_BPS)) / (365n * 86_400n * 10_000n);
+      expect(after.principal).to.equal(remainingPrincipal);
+      expect(after.principalSeconds).to.equal(expectedSeconds);
+      expect(await core.interestAtMaturity(depositId)).to.equal(afterInterest);
+      expect(await vault.reservedInterest()).to.equal(
+        reservedBefore - (beforeInterest - afterInterest),
+      );
+      expect(await token.balanceOf(depositor.address)).to.equal(userBefore + amount - penalty);
+      expect(await token.balanceOf(feeAccount.address)).to.equal(feeBefore + penalty);
+    });
+
+    it("renews a topped-up deposit with its weighted interest", async function () {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.setNextBlockTimestamp(Number(deposit.openedAt) + 30 * 86_400);
+      await withSigner(core, depositor).topUpDeposit(depositId, USDC(500));
+
+      const interest = await core.interestAtMaturity(depositId);
+      const newPrincipal = USDC(1_500) + interest;
+      await time.increaseTo(Number(deposit.maturityAt));
+      const newDepositId = await core.nextDepositId();
+
+      await expect(withSigner(core, depositor).renewDeposit(depositId, 2))
+        .to.emit(core, "Renewed")
+        .withArgs(depositId, newDepositId, newPrincipal, 2);
+      expect((await core.deposits(newDepositId)).principal).to.equal(newPrincipal);
     });
   });
 
@@ -394,11 +808,10 @@ describe("SavingCore", function () {
     });
 
     it("keeps both renewal paths active and un-minted when the vault is short", async function () {
-      const { core, vault, admin, depositor } = await loadFixture(deployBankFixture);
+      const { core, depositor } = await loadFixture(deployShortVaultFixture);
       const manual = await openDeposit(core, depositor, USDC(1_000));
       const automatic = await openDeposit(core, depositor, USDC(1_000));
       await time.increaseTo(Number(automatic.deposit.maturityAt + GRACE_PERIOD_SECONDS));
-      await withSigner(vault, admin).withdrawVault(USDC(2_000));
       const nextDepositId = await core.nextDepositId();
 
       await expect(withSigner(core, depositor).renewDeposit(manual.depositId, 2)).to.be.revertedWith(

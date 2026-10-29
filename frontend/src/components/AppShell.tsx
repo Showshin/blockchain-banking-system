@@ -36,8 +36,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     (planId?: string) => {
       if (planId) setDepositPlanId(planId)
       else if (defaultPlanId) setDepositPlanId(defaultPlanId)
+      else if (!state.wallet.connected) openWallet()
     },
-    [defaultPlanId],
+    [defaultPlanId, openWallet, state.wallet.connected],
   )
   const uiValue = useMemo(() => ({ openWallet, openDeposit }), [openWallet, openDeposit])
 

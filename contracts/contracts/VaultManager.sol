@@ -18,9 +18,14 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
     IERC20 public immutable asset;
     address public feeReceiver;
 
+    /// @notice Interest promised to active deposits. It cannot be withdrawn by the admin.
+    uint256 public reservedInterest;
+
     event VaultFunded(address indexed funder, uint256 amount);
     event VaultWithdrawn(address indexed recipient, uint256 amount);
     event FeeReceiverUpdated(address indexed previousReceiver, address indexed newReceiver);
+    event InterestReserved(uint256 amount, uint256 totalReserved);
+    event InterestReleased(uint256 amount, uint256 totalReserved);
     event InterestPaid(address indexed recipient, uint256 amount);
 
     constructor(address asset_, address admin_, address feeReceiver_) {
@@ -42,7 +47,10 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
 
     function withdrawVault(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         require(amount > 0, "Vault: zero amount");
-        require(amount <= asset.balanceOf(address(this)), "Vault: insufficient balance");
+        uint256 balance = asset.balanceOf(address(this));
+        require(amount <= balance, "Vault: insufficient balance");
+        require(reservedInterest <= balance, "Vault: undercollateralized");
+        require(amount <= balance - reservedInterest, "Vault: reserved interest");
         asset.safeTransfer(msg.sender, amount);
         emit VaultWithdrawn(msg.sender, amount);
     }
@@ -54,10 +62,25 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
         emit FeeReceiverUpdated(previousReceiver, nextReceiver);
     }
 
+    function reserveInterest(uint256 amount) external onlyRole(CORE_ROLE) {
+        require(amount > 0, "Vault: zero amount");
+        reservedInterest += amount;
+        emit InterestReserved(amount, reservedInterest);
+    }
+
+    function releaseInterest(uint256 amount) external onlyRole(CORE_ROLE) {
+        require(amount > 0, "Vault: zero amount");
+        require(amount <= reservedInterest, "Vault: release exceeds reserved");
+        reservedInterest -= amount;
+        emit InterestReleased(amount, reservedInterest);
+    }
+
     function payInterest(address to, uint256 amount) external onlyRole(CORE_ROLE) whenNotPaused {
         require(to != address(0), "Vault: zero recipient");
         require(amount > 0, "Vault: zero amount");
+        require(amount <= reservedInterest, "Vault: interest not reserved");
         require(amount <= asset.balanceOf(address(this)), "Vault: insufficient interest");
+        reservedInterest -= amount;
         asset.safeTransfer(to, amount);
         emit InterestPaid(to, amount);
     }

@@ -5,24 +5,23 @@ description: Build or extend the TÍCH on-chain term-deposit product UI with its
 
 # Fintech Product UI — TÍCH
 
-Read `docs/DESIGN.md`, `frontend/src/index.css`, and the existing components in `frontend/src/components` before editing. Reuse the current system; do not create a parallel one.
+Read the local design notes in the untracked `docs/` folder when present, `frontend/src/index.css`, and the existing components in `frontend/src/components` before editing. Reuse the current system; do not create a parallel one.
 
 ## Product frame
 
 The frontend covers section 7.3 of the assignment only:
 
 - Plans: available terms, APR, min/max and early-withdrawal penalty.
-- Deposits: active certificates, with matured certificates ready to withdraw or renew.
+- Deposits: active certificates, matured certificates ready to withdraw or renew, and principal-returned certificates with deferred interest to claim.
 - Open a deposit with validation and an interest preview.
 
-Withdraw at maturity, early withdrawal and renewal happen in dialogs from the deposit card. Do not add a dashboard, vault-admin screen, auto-renew bot controls or other admin surfaces; they are not part of the required frontend.
+Withdraw at maturity, full or partial early withdrawal, top-up, deferred-interest claim and renewal happen in dialogs from the deposit card. Do not add a dashboard, vault-admin screen, auto-renew bot controls or other admin surfaces; they are not part of the required frontend.
 
-There are two explicit data modes:
+MetaMask is the only transaction mode. It is enabled only when `frontend/.env.local` contains the chain ID and all three deployed addresses. `src/contracts/adapter.ts` reads the configured chain and sends approve/open/withdraw/partial-withdraw/top-up/claim/renew transactions through the wallet.
 
-- **Internal wallet:** state lives in browser `localStorage`; opening, withdrawing and renewing are simulations and never send a transaction.
-- **MetaMask contract mode:** enabled only when `frontend/.env.local` contains the chain ID and all three deployed addresses. `src/contracts/adapter.ts` reads the configured chain and sends approve/open/withdraw/renew transactions through the wallet.
+`BankProvider` starts with empty plans and deposits. Plans shows a connect prompt, then a loading state until chain data arrives. There is no seed or mock bank state; never describe empty or loading states as on-chain data. A connected MetaMask address by itself is not proof of a contract write; require the configured chain and a transaction receipt.
 
-Never describe internal-wallet state as on-chain data. A connected MetaMask address by itself is not proof of a contract write; require the configured chain and a transaction receipt.
+The adapter targets the current C1–C4 SavingCore ABI and reads the full nine-field deposit struct.
 
 ## Bilingual rules
 
@@ -94,7 +93,7 @@ Language and route changes should confirm the interaction immediately: animate t
 
 When contract mode is configured, also verify network mismatch, wallet rejection, pending approval/receipt and the vault-shortfall error before claiming the flow works on-chain.
 
-6. Update README.md, docs/DESIGN.md or docs/SPEC.md only if behavior or rules changed.
+6. Update README.md, and the local docs notes when present, only if behavior or rules changed.
 
 ## Definition of done
 

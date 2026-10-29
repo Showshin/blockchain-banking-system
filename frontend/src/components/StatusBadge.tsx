@@ -1,10 +1,11 @@
 import { useI18n } from '../i18n/lang'
 
-type StatusTone = 'active' | 'matured'
+type StatusTone = 'active' | 'matured' | 'pending'
 
 const styles: Record<StatusTone, string> = {
   active: 'status-badge-active',
   matured: 'status-badge-matured',
+  pending: 'status-badge-matured',
 }
 
 export function StatusBadge({ status }: { status: StatusTone }) {

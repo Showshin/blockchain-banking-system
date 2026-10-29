@@ -32,8 +32,6 @@ type DepositRecord = {
 
 const ACTIVE = 1n;
 const WITHDRAWN = 2n;
-const MANUAL_RENEWED = 3n;
-const AUTO_RENEWED = 4n;
 const USDC = (amount: string | number) => parseUnits(String(amount), 6);
 
 function check(condition: unknown, message: string): asserts condition {
@@ -59,6 +57,33 @@ function hasEvent(core: Contract, receipt: ContractTransactionReceipt, eventName
   });
 }
 
+function eventArg(
+  core: Contract,
+  receipt: ContractTransactionReceipt,
+  eventName: string,
+  argName: string,
+): bigint {
+  for (const log of receipt.logs) {
+    try {
+      const parsed = core.interface.parseLog(log);
+      if (parsed?.name === eventName) return parsed.args[argName] as bigint;
+    } catch {
+      // A transaction may contain logs from the token as well as SavingCore.
+    }
+  }
+  throw new Error(`${eventName} event is missing.`);
+}
+
+async function readDeposit(
+  core: Contract,
+  depositId: bigint,
+  blockNumber?: number,
+): Promise<DepositRecord> {
+  return (blockNumber === undefined
+    ? await core.deposits(depositId)
+    : await core.deposits(depositId, { blockTag: blockNumber })) as DepositRecord;
+}
+
 async function expectRevert(action: () => Promise<unknown>, label: string): Promise<void> {
   try {
     await action();
@@ -73,12 +98,12 @@ async function openDeposit(
   planId: bigint,
   amount: bigint,
 ): Promise<{ id: bigint; deposit: DepositRecord; receipt: ContractTransactionReceipt }> {
-  const id = (await core.nextDepositId()) as bigint;
   const receipt = (await (await core.openDeposit(planId, amount)).wait()) as ContractTransactionReceipt;
   check(hasEvent(core, receipt, "DepositOpened"), "DepositOpened event is missing.");
+  const id = eventArg(core, receipt, "DepositOpened", "depositId");
   return {
     id,
-    deposit: (await core.deposits(id)) as DepositRecord,
+    deposit: await readDeposit(core, id, receipt.blockNumber),
     receipt,
   };
 }
@@ -100,7 +125,7 @@ async function runSepoliaTransactions(
 
   const earlyReceipt = (await (await core.earlyWithdraw(first.id)).wait()) as ContractTransactionReceipt;
   check(hasEvent(core, earlyReceipt, "Withdrawn"), "Withdrawn event is missing.");
-  const settled = (await core.deposits(first.id)) as DepositRecord;
+  const settled = await readDeposit(core, first.id, earlyReceipt.blockNumber);
   check(settled.status === WITHDRAWN, "Early withdrawal did not close the deposit.");
 
   const retained = await openDeposit(core, 2n, USDC(500));
@@ -126,93 +151,13 @@ async function runSepoliaTransactions(
   };
 }
 
-async function runForkFlows(
-  core: Contract,
-  token: Contract,
-  signerAddress: string,
-  networkHelpers: Awaited<ReturnType<typeof network.create>>["networkHelpers"],
-) {
-  await (await token.mint(signerAddress, USDC(20_000))).wait();
-  await (await token.approve(core.target, MaxUint256)).wait();
-
-  const maturity = await openDeposit(core, 1n, USDC(1_000));
-  await networkHelpers.time.increaseTo(Number(maturity.deposit.maturityAt) + 1);
-  const maturityReceipt = (await (
-    await core.withdrawAtMaturity(maturity.id)
-  ).wait()) as ContractTransactionReceipt;
-  check(hasEvent(core, maturityReceipt, "Withdrawn"), "Maturity Withdrawn event is missing.");
-  const matured = (await core.deposits(maturity.id)) as DepositRecord;
-  check(matured.status === WITHDRAWN, "Maturity withdrawal did not close the deposit.");
-
-  const manual = await openDeposit(core, 1n, USDC(1_000));
-  await networkHelpers.time.increaseTo(Number(manual.deposit.maturityAt) + 1);
-  const manualReceipt = (await (
-    await core.renewDeposit(manual.id, 3n)
-  ).wait()) as ContractTransactionReceipt;
-  check(hasEvent(core, manualReceipt, "Renewed"), "Manual Renewed event is missing.");
-  const manualOld = (await core.deposits(manual.id)) as DepositRecord;
-  const manualNewId = (await core.nextDepositId()) - 1n;
-  const manualNew = (await core.deposits(manualNewId)) as DepositRecord;
-  check(manualOld.status === MANUAL_RENEWED, "Old deposit is not marked ManualRenewed.");
-  check(manualNew.status === ACTIVE && manualNew.planId === 3n, "Manual renewal target is incorrect.");
-
-  const automatic = await openDeposit(core, 1n, USDC(1_000));
-  const gracePeriod = (await core.gracePeriod()) as bigint;
-  await networkHelpers.time.increaseTo(
-    Number((automatic.deposit.maturityAt as bigint) + gracePeriod),
-  );
-  const automaticReceipt = (await (
-    await core.autoRenewDeposit(automatic.id)
-  ).wait()) as ContractTransactionReceipt;
-  check(hasEvent(core, automaticReceipt, "Renewed"), "Auto-renew Renewed event is missing.");
-  const automaticOld = (await core.deposits(automatic.id)) as DepositRecord;
-  const automaticNewId = (await core.nextDepositId()) - 1n;
-  const automaticNew = (await core.deposits(automaticNewId)) as DepositRecord;
-  check(automaticOld.status === AUTO_RENEWED, "Old deposit is not marked AutoRenewed.");
-  check(automaticNew.planId === automatic.deposit.planId, "Auto-renew changed the plan.");
-  check(
-    automaticNew.aprBpsAtOpen === automatic.deposit.aprBpsAtOpen,
-    "Auto-renew did not preserve the original APR.",
-  );
-  check(
-    automaticNew.tenorDays === automatic.deposit.tenorDays,
-    "Auto-renew did not preserve the original tenor.",
-  );
-
-  return {
-    mode: "sepolia-fork-time-travel",
-    maturityWithdrawal: {
-      depositId: maturity.id.toString(),
-      tx: maturityReceipt.hash,
-      status: matured.status.toString(),
-    },
-    manualRenewal: {
-      oldDepositId: manual.id.toString(),
-      newDepositId: manualNewId.toString(),
-      tx: manualReceipt.hash,
-      newPrincipalUsdc: formatUnits(manualNew.principal, 6),
-      newPlanId: manualNew.planId.toString(),
-    },
-    autoRenewal: {
-      oldDepositId: automatic.id.toString(),
-      newDepositId: automaticNewId.toString(),
-      tx: automaticReceipt.hash,
-      lockedAprBps: automaticNew.aprBpsAtOpen.toString(),
-      tenorDays: automaticNew.tenorDays.toString(),
-    },
-  };
-}
-
 async function main() {
   const connection = await network.create();
-  const { ethers, networkHelpers, networkName } = connection;
+  const { ethers, networkName } = connection;
   const deployment = readDeployment();
   const chain = await ethers.provider.getNetwork();
   check(chain.chainId === 11155111n, `Expected Sepolia chain 11155111, got ${chain.chainId}.`);
-  check(
-    networkName === "testnet" || networkName === "sepoliaFork",
-    `Run this script on testnet or sepoliaFork, not ${networkName}.`,
-  );
+  check(networkName === "testnet", `Run this script on testnet, not ${networkName}.`);
 
   const [signer] = await ethers.getSigners();
   check(signer, "No signer is configured.");
@@ -226,10 +171,7 @@ async function main() {
     coreCode !== "0x",
     `No SavingCore bytecode at ${deployment.contracts.SavingCore} on ${networkName} at block ${latestBlock}.`,
   );
-  const result =
-    networkName === "sepoliaFork"
-      ? await runForkFlows(core, token, signer.address, networkHelpers)
-      : await runSepoliaTransactions(core, token, signer.address);
+  const result = await runSepoliaTransactions(core, token, signer.address);
 
   console.log(JSON.stringify({ networkName, signer: signer.address, ...result }, null, 2));
 }

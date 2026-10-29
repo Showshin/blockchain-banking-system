@@ -1,4 +1,5 @@
 import { ArrowClockwise, ArrowRight, Info, WarningCircle } from '@phosphor-icons/react'
+import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PlanCard } from '../components/PlanCard'
 import { useI18n } from '../i18n/lang'
@@ -7,7 +8,7 @@ import { useUi } from '../state/ui'
 
 export function PlansPage() {
   const { state, isChainMode, chainLoading, chainError, refreshChain } = useBank()
-  const { openDeposit } = useUi()
+  const { openDeposit, openWallet } = useUi()
   const { t } = useI18n()
 
   return (
@@ -26,7 +27,17 @@ export function PlansPage() {
         }
       />
 
-      {isChainMode && chainLoading && state.plans.length === 0 ? (
+      {!state.wallet.connected ? (
+        <EmptyState
+          title={t.chain.connectTitle}
+          description={t.chain.connectDescription}
+          action={
+            <button type="button" className="btn btn-primary" onClick={openWallet}>
+              {t.common.connectWallet}
+            </button>
+          }
+        />
+      ) : isChainMode && chainLoading && state.plans.length === 0 ? (
         <div className="panel min-h-[360px] animate-pulse p-6" role="status" aria-live="polite">
           <span className="sr-only">{t.chain.loading}</span>
           <div className="h-3 w-28 rounded-full bg-paper-deep" />

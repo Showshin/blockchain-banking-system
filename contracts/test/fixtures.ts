@@ -16,8 +16,12 @@ export function withSigner(contract: Contract, signer: TestSigner): Contract {
   return contract.connect(signer) as unknown as Contract;
 }
 
-export async function deployBankFixture(ethers: TestEthers) {
+export async function deployBankFixture(
+  ethers: TestEthers,
+  options: { vaultFunding?: bigint } = {},
+) {
   const [admin, depositor, recipient, feeAccount, outsider] = await ethers.getSigners();
+  const vaultFunding = options.vaultFunding ?? USDC(2_000);
 
   const token = (await ethers.deployContract("MockUSDC")) as unknown as Contract;
   const vault = (await ethers.deployContract("VaultManager", [
@@ -41,7 +45,9 @@ export async function deployBankFixture(ethers: TestEthers) {
   await withSigner(token, depositor).approve(core.target, ethers.MaxUint256);
   await withSigner(token, recipient).approve(core.target, ethers.MaxUint256);
 
-  await vault.fundVault(USDC(2_000));
+  if (vaultFunding > 0n) {
+    await vault.fundVault(vaultFunding);
+  }
   await core.createPlan(
     DEFAULT_TENOR_DAYS,
     DEFAULT_APR_BPS,
@@ -82,6 +88,7 @@ export async function openDeposit(
       openedAt: bigint;
       maturityAt: bigint;
       status: bigint;
+      principalSeconds: bigint;
     },
   };
 }

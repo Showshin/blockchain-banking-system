@@ -1,4 +1,9 @@
-export type DepositStatus = 'active' | 'withdrawn' | 'manual-renewed' | 'auto-renewed'
+export type DepositStatus =
+  | 'active'
+  | 'withdrawn'
+  | 'manual-renewed'
+  | 'auto-renewed'
+  | 'principal-withdrawn'
 
 export type WalletMode = 'metamask'
 
@@ -32,6 +37,8 @@ export interface Deposit {
   maturityAt: string
   status: DepositStatus
   owner: string
+  interestAtMaturity: number
+  pendingInterest: number
   parentId?: string
 }
 

@@ -1,6 +1,6 @@
 import { ArrowClockwise, ArrowRight, Clock, SealCheck, Wallet, WarningCircle } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
-import { ActionDialog } from '../components/ActionDialog'
+import { ActionDialog, type ActionMode } from '../components/ActionDialog'
 import { CertificateCard } from '../components/CertificateCard'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
@@ -11,7 +11,7 @@ import { daysBetween, formatDate, formatUsdc } from '../lib/format'
 import { useBank } from '../state/bank'
 import { useUi } from '../state/ui'
 
-type ActionState = { depositId: string; mode: 'withdraw' | 'renew' } | null
+type ActionState = { depositId: string; mode: ActionMode } | null
 
 export function DepositsPage() {
   const { state, isChainMode, chainLoading, chainError, refreshChain } = useBank()
@@ -20,7 +20,10 @@ export function DepositsPage() {
   const [action, setAction] = useState<ActionState>(null)
 
   const deposits = state.deposits
-    .filter((deposit) => deposit.status === 'active')
+    .filter(
+      (deposit) =>
+        deposit.status === 'active' || deposit.status === 'principal-withdrawn',
+    )
     .sort((a, b) => b.certificateNo - a.certificateNo)
   const nextMaturity = state.deposits
     .filter((deposit) => deposit.status === 'active' && !isMatured(deposit))
@@ -77,7 +80,7 @@ export function DepositsPage() {
         </div>
       ) : null}
 
-      {isChainMode && chainLoading ? (
+      {isChainMode && chainLoading && deposits.length > 0 ? (
         <div className="mb-5 text-xs text-muted" role="status">
           {t.chain.loading}
         </div>
@@ -112,8 +115,17 @@ export function DepositsPage() {
               plan={state.plans.find((plan) => plan.id === deposit.planId)}
               onWithdraw={(selected) => setAction({ depositId: selected.id, mode: 'withdraw' })}
               onRenew={(selected) => setAction({ depositId: selected.id, mode: 'renew' })}
+              onTopUp={(selected) => setAction({ depositId: selected.id, mode: 'topup' })}
+              onClaim={(selected) => setAction({ depositId: selected.id, mode: 'claim' })}
             />
           ))}
+        </div>
+      ) : isChainMode && chainLoading ? (
+        <div className="panel min-h-[260px] animate-pulse p-6" role="status" aria-live="polite">
+          <span className="sr-only">{t.chain.loading}</span>
+          <div className="h-3 w-28 rounded-full bg-paper-deep" />
+          <div className="mt-7 h-10 w-2/3 rounded-full bg-paper-deep" />
+          <div className="mt-4 h-4 w-1/2 rounded-full bg-paper-deep" />
         </div>
       ) : (
         <EmptyState

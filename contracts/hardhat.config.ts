@@ -6,34 +6,30 @@ import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 import hardhatEthersChaiMatchers from "@nomicfoundation/hardhat-ethers-chai-matchers";
 import hardhatMocha from "@nomicfoundation/hardhat-mocha";
 import hardhatNetworkHelpers from "@nomicfoundation/hardhat-network-helpers";
+import hardhatVerify from "@nomicfoundation/hardhat-verify";
 
-function resolveSepoliaForkBlock(): number | undefined {
-  const override = process.env.TESTNET_FORK_BLOCK?.trim();
-  if (override) {
-    const block = Number(override);
-    if (!Number.isSafeInteger(block) || block <= 0) {
-      throw new Error("TESTNET_FORK_BLOCK must be a positive integer.");
+function loadLocalEnv() {
+  const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), ".env");
+  if (!fs.existsSync(envPath)) return;
+
+  for (const rawLine of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    let value = line.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
     }
-    return block;
+    if (process.env[key] === undefined) process.env[key] = value;
   }
-
-  const configDir = path.dirname(fileURLToPath(import.meta.url));
-  const manifestPath = path.join(configDir, "deployments", "testnet.json");
-  if (!fs.existsSync(manifestPath)) return undefined;
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
-    deploymentBlock?: number;
-    completedBlock?: number;
-  };
-  if (Number.isSafeInteger(manifest.completedBlock) && Number(manifest.completedBlock) > 0) {
-    return manifest.completedBlock;
-  }
-  if (Number.isSafeInteger(manifest.deploymentBlock) && Number(manifest.deploymentBlock) > 0) {
-    return Number(manifest.deploymentBlock) + 20;
-  }
-  return undefined;
 }
 
-const sepoliaForkBlock = resolveSepoliaForkBlock();
+loadLocalEnv();
 
 export default defineConfig({
   plugins: [
@@ -41,6 +37,7 @@ export default defineConfig({
     hardhatMocha,
     hardhatEthersChaiMatchers,
     hardhatNetworkHelpers,
+    hardhatVerify,
   ],
   solidity: {
     version: "0.8.38",
@@ -50,6 +47,11 @@ export default defineConfig({
         enabled: true,
         runs: 200,
       },
+    },
+  },
+  verify: {
+    etherscan: {
+      apiKey: configVariable("ETHERSCAN_API_KEY"),
     },
   },
   networks: {
@@ -70,15 +72,6 @@ export default defineConfig({
       chainId: 11155111,
       url: configVariable("TESTNET_RPC_URL"),
       accounts: [configVariable("DEPLOYER_PRIVATE_KEY")],
-    },
-    sepoliaFork: {
-      type: "edr-simulated",
-      chainType: "l1",
-      chainId: 11155111,
-      forking: {
-        url: configVariable("TESTNET_RPC_URL"),
-        blockNumber: sepoliaForkBlock,
-      },
     },
   },
 });

@@ -15,6 +15,7 @@ const ACTIVE = 1n
 const WITHDRAWN = 2n
 const MANUAL_RENEWED = 3n
 const AUTO_RENEWED = 4n
+const PRINCIPAL_WITHDRAWN = 5n
 
 type ChainPlan = {
   tenorDays: bigint
@@ -45,10 +46,22 @@ export interface ChainSnapshot {
 }
 
 export interface WithdrawReceipt {
-  kind: 'early' | 'mature'
+  kind: 'early' | 'partial' | 'mature'
   interest: number
   penalty: number
   payout: number
+  remainingPrincipal: number
+  pendingInterest: number
+}
+
+export interface ClaimReceipt {
+  interest: number
+}
+
+export interface TopUpReceipt {
+  amount: number
+  newPrincipal: number
+  interestAdded: number
 }
 
 function requireConfig(): ContractConfig {
@@ -90,6 +103,7 @@ function statusFromChain(status: bigint): DepositStatus {
   if (status === WITHDRAWN) return 'withdrawn'
   if (status === MANUAL_RENEWED) return 'manual-renewed'
   if (status === AUTO_RENEWED) return 'auto-renewed'
+  if (status === PRINCIPAL_WITHDRAWN) return 'principal-withdrawn'
   return 'active'
 }
 
@@ -129,7 +143,13 @@ function chainPlanId(planId: string): bigint {
   return BigInt(match[1])
 }
 
-function toDeposit(id: bigint, source: ChainDeposit, owner: string): Deposit {
+function toDeposit(
+  id: bigint,
+  source: ChainDeposit,
+  owner: string,
+  interestAtMaturity: bigint,
+  pendingInterest: bigint,
+): Deposit {
   return {
     id: `chain-${id}`,
     certificateNo: Number(id),
@@ -142,7 +162,19 @@ function toDeposit(id: bigint, source: ChainDeposit, owner: string): Deposit {
     maturityAt: new Date(Number(source.maturityAt) * 1_000).toISOString(),
     status: statusFromChain(source.status),
     owner,
+    interestAtMaturity: asNumber(interestAtMaturity),
+    pendingInterest: asNumber(pendingInterest),
   }
+}
+
+async function readDepositSource(
+  core: Contract,
+  id: bigint,
+  blockTag?: number,
+): Promise<ChainDeposit> {
+  return (blockTag === undefined
+    ? await core.deposits(id)
+    : await core.deposits(id, { blockTag })) as ChainDeposit
 }
 
 async function readDeposit(
@@ -150,14 +182,18 @@ async function readDeposit(
   id: bigint,
   owner: string,
   blockTag?: number,
+  pendingInterest = 0n,
 ): Promise<Deposit> {
   // A load-balanced RPC can serve a stale latest block immediately after a
   // receipt. Read against the receipt block so the returned certificate is
   // never rendered with zeroed state.
-  const source = (blockTag === undefined
-    ? await core.deposits(id)
-    : await core.deposits(id, { blockTag })) as ChainDeposit
-  return toDeposit(id, source, owner)
+  const [source, interest] = (await Promise.all([
+    readDepositSource(core, id, blockTag),
+    blockTag === undefined
+      ? core.interestAtMaturity(id)
+      : core.interestAtMaturity(id, { blockTag }),
+  ])) as [ChainDeposit, bigint]
+  return toDeposit(id, source, owner, interest, pendingInterest)
 }
 
 function eventDepositId(core: Contract, receipt: ContractTransactionReceipt): bigint {
@@ -170,6 +206,42 @@ function eventDepositId(core: Contract, receipt: ContractTransactionReceipt): bi
     }
   }
   throw new Error('The deposit event was not found in the transaction receipt.')
+}
+
+function eventArgs(
+  core: Contract,
+  receipt: ContractTransactionReceipt,
+  name: string,
+): Record<string, unknown> | null {
+  for (const log of receipt.logs) {
+    try {
+      const parsed = core.interface.parseLog(log)
+      if (parsed?.name === name) return parsed.args as Record<string, unknown>
+    } catch {
+      // A transaction may contain logs from the token as well as SavingCore.
+    }
+  }
+  return null
+}
+
+function eventPartialWithdrawal(
+  core: Contract,
+  receipt: ContractTransactionReceipt,
+): { penalty: bigint; remainingPrincipal: bigint } {
+  for (const log of receipt.logs) {
+    try {
+      const parsed = core.interface.parseLog(log)
+      if (parsed?.name === 'PartialEarlyWithdrawn') {
+        return {
+          penalty: parsed.args.penalty as bigint,
+          remainingPrincipal: parsed.args.remainingPrincipal as bigint,
+        }
+      }
+    } catch {
+      // A transaction may contain logs from the token as well as SavingCore.
+    }
+  }
+  throw new Error('The partial withdrawal event was not found in the transaction receipt.')
 }
 
 export async function assertConfiguredNetwork(): Promise<void> {
@@ -210,12 +282,19 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
   const deposits = (
     await Promise.all(
       ids.map(async (id) => {
-        const [source, owner] = await Promise.all([
-          core.deposits(id) as Promise<ChainDeposit>,
+        const [source, owner, interest, pending] = await Promise.all([
+          readDepositSource(core, id),
           core.ownerOf(id) as Promise<string>,
+          core.interestAtMaturity(id) as Promise<bigint>,
+          core.pendingInterest(id) as Promise<bigint>,
         ])
-        if (source.status !== ACTIVE || owner.toLowerCase() !== address.toLowerCase()) return null
-        return toDeposit(id, source, owner)
+        // A deferred-interest certificate stays visible until its interest is
+        // claimed; after that the position is fully closed.
+        const visible =
+          source.status === ACTIVE ||
+          (source.status === PRINCIPAL_WITHDRAWN && pending > 0n)
+        if (!visible || owner.toLowerCase() !== address.toLowerCase()) return null
+        return toDeposit(id, source, owner, interest, pending)
       }),
     )
   ).filter((deposit): deposit is Deposit => deposit !== null)
@@ -264,17 +343,53 @@ export async function withdrawChainDeposit(
   const chainNow = Number(latestBlock?.timestamp ?? 0) * 1_000
   const matured = chainNow >= new Date(before.maturityAt).getTime()
 
-  await (matured ? core.withdrawAtMaturity(id) : core.earlyWithdraw(id)).then((tx) => tx.wait())
+  const receipt = (await (
+    matured ? core.withdrawAtMaturity(id) : core.earlyWithdraw(id)
+  ).then((tx) => tx.wait())) as ContractTransactionReceipt
 
-  const interest = matured ? asNumber(interestUnits) : 0
-  const penalty = matured ? 0 : asNumber(penaltyUnits)
+  const deferred = eventArgs(core, receipt, 'InterestDeferred')
+  const deferredUnits = deferred ? (deferred.amount as bigint) : 0n
+  const paidInterestUnits = matured ? interestUnits - deferredUnits : 0n
+  const pendingInterest = asNumber(deferredUnits)
+  const status: DepositStatus = pendingInterest > 0 ? 'principal-withdrawn' : 'withdrawn'
   return {
-    deposit: { ...before, status: 'withdrawn' },
+    deposit: { ...before, status, pendingInterest },
     receipt: {
       kind: matured ? 'mature' : 'early',
-      interest,
-      penalty,
-      payout: before.principal + interest - penalty,
+      interest: asNumber(paidInterestUnits),
+      penalty: matured ? 0 : asNumber(penaltyUnits),
+      payout:
+        before.principal +
+        asNumber(paidInterestUnits) -
+        (matured ? 0 : asNumber(penaltyUnits)),
+      remainingPrincipal: 0,
+      pendingInterest,
+    },
+  }
+}
+
+export async function withdrawChainDepositPartial(
+  address: string,
+  depositId: string,
+  amount: number,
+): Promise<{ deposit: Deposit; receipt: WithdrawReceipt }> {
+  const id = BigInt(depositId.replace('chain-', ''))
+  const { core } = await writeContracts(address)
+  const before = await readDeposit(core, id, address)
+  const units = parseUnits(amount.toFixed(6), 6)
+  const receipt = (await (
+    await core.earlyWithdrawPartial(id, units)
+  ).wait()) as ContractTransactionReceipt
+  const { penalty, remainingPrincipal } = eventPartialWithdrawal(core, receipt)
+  return {
+    deposit: { ...before, principal: asNumber(remainingPrincipal) },
+    receipt: {
+      kind: 'partial',
+      interest: 0,
+      penalty: asNumber(penalty),
+      payout: asNumber(units - penalty),
+      remainingPrincipal: asNumber(remainingPrincipal),
+      pendingInterest: 0,
     },
   }
 }
@@ -290,4 +405,45 @@ export async function renewChainDeposit(
     await core.renewDeposit(oldId, chainPlanId(newPlanId))
   ).wait()) as ContractTransactionReceipt
   return readDeposit(core, eventDepositId(core, receipt), address, receipt.blockNumber)
+}
+
+export async function topUpChainDeposit(
+  address: string,
+  depositId: string,
+  amount: number,
+): Promise<{ deposit: Deposit; receipt: TopUpReceipt }> {
+  const id = BigInt(depositId.replace('chain-', ''))
+  const { core, usdc } = await writeContracts(address)
+  const units = parseUnits(amount.toFixed(6), 6)
+  const allowance = (await usdc.allowance(address, contractConfig?.coreAddress)) as bigint
+  if (allowance < units) {
+    await (await usdc.approve(contractConfig?.coreAddress, MaxUint256)).wait()
+  }
+  const receipt = (await (
+    await core.topUpDeposit(id, units)
+  ).wait()) as ContractTransactionReceipt
+  const args = eventArgs(core, receipt, 'DepositToppedUp')
+  if (!args) throw new Error('The top-up event was not found in the transaction receipt.')
+  return {
+    deposit: await readDeposit(core, id, address, receipt.blockNumber),
+    receipt: {
+      amount: asNumber(args.amount as bigint),
+      newPrincipal: asNumber(args.newPrincipal as bigint),
+      interestAdded: asNumber(args.interestAdded as bigint),
+    },
+  }
+}
+
+export async function claimChainInterest(
+  address: string,
+  depositId: string,
+): Promise<ClaimReceipt> {
+  const id = BigInt(depositId.replace('chain-', ''))
+  const { core } = await writeContracts(address)
+  const receipt = (await (
+    await core.claimInterest(id)
+  ).wait()) as ContractTransactionReceipt
+  const args = eventArgs(core, receipt, 'InterestClaimed')
+  if (!args) throw new Error('The interest claim event was not found in the transaction receipt.')
+  return { interest: asNumber(args.amount as bigint) }
 }

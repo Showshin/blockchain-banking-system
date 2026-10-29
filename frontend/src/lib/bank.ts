@@ -47,13 +47,37 @@ export function depositProgress(deposit: Deposit, now = Date.now()): number {
 }
 
 export function interestEarned(deposit: Deposit): number {
-  return interestFor(deposit.principal, deposit.aprBpsAtOpen, deposit.tenorDays)
+  return deposit.interestAtMaturity
+}
+
+export function isClaimable(deposit: Deposit): boolean {
+  return deposit.status === 'principal-withdrawn' && deposit.pendingInterest > 0
 }
 
 export function totalOutstandingInterest(deposits: Deposit[]): number {
-  return deposits
-    .filter((deposit) => deposit.status === 'active')
-    .reduce((total, deposit) => total + interestEarned(deposit), 0)
+  return deposits.reduce((total, deposit) => {
+    if (deposit.status === 'active') return total + interestEarned(deposit)
+    if (deposit.status === 'principal-withdrawn') return total + deposit.pendingInterest
+    return total
+  }, 0)
+}
+
+/** Seconds left in the term; used only for the top-up preview. */
+export function remainingSeconds(deposit: Deposit, now = Date.now()): number {
+  return Math.max(0, Math.floor((new Date(deposit.maturityAt).getTime() - now) / 1_000))
+}
+
+/**
+ * Extra interest a top-up earns until the original maturity, mirroring the
+ * contract's principal-seconds formula in micro-USDC.
+ */
+export function topUpInterestFor(deposit: Deposit, amount: number, now = Date.now()): number {
+  const seconds = remainingSeconds(deposit, now)
+  const amountUnits = toUnits(Math.max(0, amount))
+  if (amountUnits === 0n || seconds <= 0 || deposit.aprBpsAtOpen <= 0) return 0
+  const interestUnits =
+    (amountUnits * BigInt(deposit.aprBpsAtOpen) * BigInt(seconds)) / (365n * 86_400n * 10_000n)
+  return fromUnits(interestUnits)
 }
 
 export function totalActivePrincipal(deposits: Deposit[]): number {

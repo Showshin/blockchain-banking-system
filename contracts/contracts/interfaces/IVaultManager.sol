@@ -6,5 +6,11 @@ interface IVaultManager {
 
     function paused() external view returns (bool);
 
+    function reservedInterest() external view returns (uint256);
+
+    function reserveInterest(uint256 amount) external;
+
+    function releaseInterest(uint256 amount) external;
+
     function payInterest(address to, uint256 amount) external;
 }

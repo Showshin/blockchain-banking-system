@@ -1,9 +1,11 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import { deployBankFixture, USDC, withSigner } from "./fixtures.ts";
+import { deployBankFixture, openDeposit, USDC, withSigner } from "./fixtures.ts";
 
 const { ethers, networkHelpers } = await network.create();
+const { time } = networkHelpers;
 const loadBankFixture = () => deployBankFixture(ethers);
+const loadShortVaultFixture = () => deployBankFixture(ethers, { vaultFunding: USDC(1) });
 
 describe("VaultManager", function () {
   it("rejects zero constructor dependencies", async function () {
@@ -100,5 +102,108 @@ describe("VaultManager", function () {
     await expect(withSigner(vault, admin).payInterest(depositor.address, 0)).to.be.revertedWith(
       "Vault: zero amount",
     );
+    await expect(withSigner(vault, admin).payInterest(depositor.address, USDC(1))).to.be.revertedWith(
+      "Vault: interest not reserved",
+    );
+
+    await withSigner(vault, admin).reserveInterest(USDC(1));
+    await expect(withSigner(vault, admin).payInterest(depositor.address, USDC(2))).to.be.revertedWith(
+      "Vault: interest not reserved",
+    );
+    await expect(withSigner(vault, admin).payInterest(depositor.address, USDC(1)))
+      .to.emit(vault, "InterestPaid")
+      .withArgs(depositor.address, USDC(1));
+    expect(await vault.reservedInterest()).to.equal(0n);
+  });
+
+  it("tracks reserved interest through the core role only", async function () {
+    const { admin, outsider, vault } = await networkHelpers.loadFixture(loadBankFixture);
+    const coreRole = await vault.CORE_ROLE();
+
+    await expect(withSigner(vault, outsider).reserveInterest(USDC(100)))
+      .to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount")
+      .withArgs(outsider.address, coreRole);
+    await expect(withSigner(vault, outsider).releaseInterest(USDC(100)))
+      .to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount")
+      .withArgs(outsider.address, coreRole);
+
+    await withSigner(vault, admin).grantRole(coreRole, admin.address);
+    await expect(withSigner(vault, admin).reserveInterest(USDC(100)))
+      .to.emit(vault, "InterestReserved")
+      .withArgs(USDC(100), USDC(100));
+    expect(await vault.reservedInterest()).to.equal(USDC(100));
+
+    await expect(withSigner(vault, admin).releaseInterest(USDC(40)))
+      .to.emit(vault, "InterestReleased")
+      .withArgs(USDC(40), USDC(60));
+    expect(await vault.reservedInterest()).to.equal(USDC(60));
+
+    await expect(withSigner(vault, admin).releaseInterest(USDC(61))).to.be.revertedWith(
+      "Vault: release exceeds reserved",
+    );
+    await expect(withSigner(vault, admin).reserveInterest(0)).to.be.revertedWith(
+      "Vault: zero amount",
+    );
+    await expect(withSigner(vault, admin).releaseInterest(0)).to.be.revertedWith(
+      "Vault: zero amount",
+    );
+  });
+
+  it("caps admin withdrawals at the unreserved balance", async function () {
+    const { admin, depositor, token, vault, core } = await networkHelpers.loadFixture(
+      loadBankFixture,
+    );
+    const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+    const reserved = await vault.reservedInterest();
+    const balance = await token.balanceOf(vault.target);
+
+    expect(reserved).to.be.greaterThan(0n);
+    await expect(withSigner(vault, admin).withdrawVault(USDC(2_000))).to.be.revertedWith(
+      "Vault: reserved interest",
+    );
+
+    await withSigner(vault, admin).withdrawVault(balance - reserved);
+    expect(await token.balanceOf(vault.target)).to.equal(reserved);
+    await expect(withSigner(vault, admin).withdrawVault(1)).to.be.revertedWith(
+      "Vault: reserved interest",
+    );
+
+    await time.increaseTo(Number(deposit.maturityAt));
+    await withSigner(core, depositor).withdrawAtMaturity(depositId);
+    expect(await vault.reservedInterest()).to.equal(0n);
+    expect(await token.balanceOf(vault.target)).to.equal(0n);
+
+    await withSigner(vault, admin).fundVault(USDC(100));
+    await withSigner(vault, admin).withdrawVault(USDC(100));
+    expect(await token.balanceOf(vault.target)).to.equal(0n);
+  });
+
+  it("blocks withdrawals while reserved interest exceeds the balance", async function () {
+    const { admin, depositor, token, vault, core } = await networkHelpers.loadFixture(
+      loadShortVaultFixture,
+    );
+    await openDeposit(core, depositor, USDC(1_000));
+    const reserved = await vault.reservedInterest();
+    expect(reserved).to.be.greaterThan(await token.balanceOf(vault.target));
+
+    await expect(withSigner(vault, admin).withdrawVault(USDC(2))).to.be.revertedWith(
+      "Vault: insufficient balance",
+    );
+    await expect(withSigner(vault, admin).withdrawVault(USDC(1))).to.be.revertedWith(
+      "Vault: undercollateralized",
+    );
+  });
+
+  it("releases the reservation on partial and full early exits", async function () {
+    const { core, depositor, vault } = await networkHelpers.loadFixture(loadBankFixture);
+    const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+    expect(await vault.reservedInterest()).to.equal(await core.interestAtMaturity(depositId));
+
+    await withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(400));
+    const afterPartial = await core.interestAtMaturity(depositId);
+    expect(await vault.reservedInterest()).to.equal(afterPartial);
+
+    await withSigner(core, depositor).earlyWithdraw(depositId);
+    expect(await vault.reservedInterest()).to.equal(0n);
   });
 });

@@ -5,8 +5,8 @@ Solidity implementation for the three required contracts in the project specific
 | File | Vai trò |
 |---|---|
 | `contracts/MockUSDC.sol` | ERC-20 test token, 6 decimals, public mint |
-| `contracts/VaultManager.sol` | Kho lãi của ngân hàng, fee receiver, pause và trả lãi |
-| `contracts/SavingCore.sol` | Gói, chứng chỉ ERC-721, tất toán, rút sớm và tái gửi |
+| `contracts/VaultManager.sol` | Kho lãi của ngân hàng, reserve phần lãi đã hứa, fee receiver, pause và trả lãi |
+| `contracts/SavingCore.sol` | Gói, chứng chỉ ERC-721, tất toán, nhận lãi chờ, nạp thêm, rút sớm và tái gửi |
 | `contracts/interfaces/IVaultManager.sol` | Ranh giới `SavingCore` → `VaultManager` |
 
 `IVaultManager` chỉ là interface định kiểu; không có bytecode được deploy riêng. Ba contract còn lại giữ đúng vai trò tiền gốc, kho lãi và mock token của đề bài.
@@ -54,42 +54,55 @@ Script deploy thực hiện theo thứ tự:
 5. Tạo bốn gói 30/90/180/365 ngày.
 6. Ghi `deployments/<network>.json` gồm chain ID, block deploy, địa chỉ contract và thông số gói.
 
-`configure:frontend` chuyển deployment đó thành `frontend/.env.local`. File `.env.local` và thư mục `deployments/` không được commit. Địa chỉ local là tạm thời; phải deploy và cấu hình lại sau mỗi lần reset node.
+`configure:frontend` chuyển deployment đó thành `frontend/.env.local`. File `.env.local` không được commit; `deployments/localhost.json` là artifact tạm của node local và cũng không được commit, còn `deployments/testnet.json` được track để làm manifest công khai cho Sepolia. Địa chỉ local là tạm thời; phải deploy và cấu hình lại sau mỗi lần reset node.
 
 `verify:local` kiểm tra manifest với RPC đang chạy: chain ID, bytecode, địa chỉ token/vault/core, `CORE_ROLE`, fee receiver, grace period, bốn gói và funding vault. Nó không mở MetaMask nên không thay thế kiểm tra bằng ví thật.
 
 ## Sepolia testnet deployment
 
-Network `testnet` bị khóa ở Sepolia chain ID `11155111` và dùng hai cấu hình bắt buộc: `TESTNET_RPC_URL` và `DEPLOYER_PRIVATE_KEY`. `FEE_RECEIVER_ADDRESS` và `EXPLORER_BASE_URL` là tùy chọn. Truyền chúng bằng biến môi trường của shell; không ghi private key vào file source.
+Network `testnet` bị khóa ở Sepolia chain ID `11155111` và dùng hai cấu hình bắt buộc: `TESTNET_RPC_URL` và `DEPLOYER_PRIVATE_KEY`. `FEE_RECEIVER_ADDRESS` và `EXPLORER_BASE_URL` là tùy chọn. Có thể đặt trong `contracts/.env` (file đã ignore) hoặc truyền bằng biến môi trường của shell; không ghi private key vào file source.
+
+```text
+# contracts/.env — không commit
+TESTNET_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+DEPLOYER_PRIVATE_KEY=0x...
+ETHERSCAN_API_KEY=...
+EXPLORER_BASE_URL=https://sepolia.etherscan.io
+```
 
 ```powershell
-$env:TESTNET_RPC_URL='https://ethereum-sepolia-rpc.publicnode.com'
-$env:DEPLOYER_PRIVATE_KEY='0x...'
 npm run deploy:testnet
 npm run verify:testnet
 npm run testnet:smoke
-npm run testnet:fork
 npm run configure:frontend -- testnet
 ```
 
-Script deploy từ chối chain ID `1`, ghi manifest vào `deployments/testnet.json`, và `verify:testnet` sẽ fail nếu chain thật khác Sepolia hoặc nếu bytecode/role/plan/funding không khớp. `testnet:smoke` gửi giao dịch thật để mở một sổ, kiểm tra chặn rút trước hạn và rút sớm. `testnet:fork` dùng network `sepoliaFork` để mô phỏng thời gian trên bản sao trạng thái Sepolia, sau đó kiểm tra tất toán, manual renew và auto-renew.
+`verify:testnet` chỉ kiểm tra manifest/bytecode/role/gói; source verification dùng plugin `hardhat-verify` (API key lấy từ `ETHERSCAN_API_KEY`):
+
+```powershell
+npx hardhat verify --network testnet <MockUSDC>
+npx hardhat verify --network testnet <VaultManager> <MockUSDC> <admin> <feeReceiver>
+npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 259200
+```
+
+Script deploy từ chối chain ID `1`, ghi manifest vào `deployments/testnet.json`, và `verify:testnet` sẽ fail nếu chain thật khác Sepolia hoặc nếu bytecode/role/plan/funding không khớp. `testnet:smoke` gửi giao dịch thật để mở một sổ, kiểm tra chặn rút trước hạn và rút sớm.
 
 Deployment hiện tại trên Sepolia:
 
 | Contract | Address |
 |---|---|
-| `MockUSDC` | `0x4A5ee598558e49c78a545417B38251566482785c` |
-| `VaultManager` | `0x63C7e3c9c3F70b1692f13ad21252ba3a02e3bEe5` |
-| `SavingCore` | `0xD2297a633D35f2F6E78f4eAD8BF214E241704ECf` |
+| `MockUSDC` | `0x56790fee15a3E0A7921ccc7852a07b8C1E0C8289` |
+| `VaultManager` | `0x14BB3b3579f00087127d998d1362f8082F2cDD10` |
+| `SavingCore` | `0x215b88d623B6c66fFa1c4778503C2525ff03bc89` |
 
-`verify:testnet` đã xác nhận 11 setup transaction thành công. Smoke test đã mở và rút sớm sổ #1 với penalty `2.0 USDC`, đồng thời giữ sổ #2 `500 USDC` active. Fork test tại block `12010648` đã qua tất toán, manual renew (gốc mới `1,001.438356 USDC`) và auto-renew giữ APR `175 bps`, tenor `30 ngày`.
+`verify:testnet` đã xác nhận 11 setup transaction thành công, bốn gói và vault `100,000 USDC`; source của cả ba contract đã verify trên Etherscan (`VaultManager` và `SavingCore` cũng có trên Sourcify). Smoke test giao dịch thật đã mở sổ #1 `100 USDC` (gói 30 ngày) và rút sớm với penalty `2.0 USDC`; sổ #2 `500 USDC` (gói 90 ngày) được giữ active. Bản deploy này gồm đủ C1–C4. Các luồng cần tua thời gian chưa chạy trên Sepolia thật và sẽ được kiểm tra khi có thêm Sepolia ETH.
 
 ## Test
 
 Lần chạy gần nhất:
 
 ```text
-35 passing
+58 passing
 Total 100.00% lines / 100.00% statements
 ```
 
@@ -102,7 +115,11 @@ Các nhóm đã phủ:
 - Manual renew, target plan bị disable, renew sau grace và auto-renew đúng biên grace.
 - Auto-renew giữ APR/penalty/tenor gốc; NFT transfer chuyển quyền thao tác.
 - Constructor từ chối địa chỉ/grace period bằng 0; open deposit không có allowance không mint NFT.
-- Vault thiếu lãi rollback cả manual renew và auto-renew; pause chặn cả bốn lối ra; penalty đi theo fee receiver hiện tại.
+- Vault thiếu lãi rollback cả manual renew và auto-renew; pause chặn cả năm lối ra; penalty đi theo fee receiver hiện tại.
+- C3: rút sớm một phần, penalty trên phần rút, min còn lại, snapshot/tenor/maturity giữ nguyên, lãi đáo hạn trên phần còn lại, owner/NFT transfer, pause, penalty 0/100% và full withdrawal sau partial.
+- C1: tất toán trả gốc và ghi nợ lãi khi vault thiếu; claim sau khi nạp vault; claim đi theo NFT; pause chặn claim; sổ `PrincipalWithdrawn` không dùng lại cho lối ra đáo hạn.
+- C2: reserve/release chỉ qua `CORE_ROLE`; cap rút admin theo `balance − reservedInterest`; chặn khi reserve vượt số dư; release đúng khi rút sớm toàn bộ/một phần.
+- C4: top-up giữa kỳ dùng principal-seconds, reserve delta, chặn owner/zero/max/pause/maturity, giảm pro-rata sau rút sớm một phần và tái gửi sổ đã top-up.
 
 ## Quyết định triển khai
 
@@ -110,15 +127,18 @@ Các nhóm đã phủ:
 - APR, penalty và tenor được snapshot vào từng deposit. Update plan không sửa deposit cũ.
 - Auto-renew không đọc APR hiện tại. Nó dùng snapshot gốc và vẫn chạy nếu plan đã bị disable.
 - Manual renewal vào một plan đang disable bị chặn.
-- Nếu vault thiếu lãi, giao dịch revert; gốc không thể bị rút nửa vời.
+- C1: nếu vault thiếu lãi lúc tất toán, `SavingCore` vẫn trả gốc, chuyển sổ sang `PrincipalWithdrawn` và ghi `pendingInterest`; chủ NFT hiện tại gọi `claimInterest` khi vault có tiền. Manual renew và auto-renew vẫn revert khi vault thiếu lãi vì chúng cần lãi để tạo gốc mới.
 - Chủ sở hữu NFT hiện tại có quyền thao tác. Transfer không tự chuyển tiền lần hai.
-- Vault admin có thể rút tiền đã hứa do base spec không có solvency reserve. Đây là giới hạn có chủ đích; bonus C2 chưa làm.
+- C3: `earlyWithdrawPartial` giảm `principal`, giữ snapshot APR/penalty/tenor/maturity; phần còn lại phải `>= plan.minDeposit`; phát event `PartialEarlyWithdrawn`.
+- C4: `Deposit.principalSeconds` lưu tổng principal-seconds; `topUpDeposit` cộng thêm `amount × remainingSeconds`, reserve phần lãi tăng thêm và không đổi APR/maturity/tenor. Rút sớm một phần giảm `principalSeconds` pro-rata.
+- C2: `VaultManager.reservedInterest` cộng khi mở sổ/top-up và trừ khi rút sớm hoặc trả lãi. `withdrawVault` bị cap ở `balance − reservedInterest`; `payInterest` từ chối khoản chưa reserve và chặn khi reserve vượt số dư.
+- Reservation là accounting trong cùng vault, không phải escrow riêng. Reserve không kiểm tra số dư lúc reserve, nên vault có thể under-collateralized nếu admin rút hết phần chưa hứa; C1 giữ gốc rút được trong trường hợp đó.
 
 ## Phân quyền
 
 - Deployer nhận `DEFAULT_ADMIN_ROLE` và `PLAN_MANAGER_ROLE` trên `SavingCore`.
 - Deployer nhận `DEFAULT_ADMIN_ROLE` và `PAUSER_ROLE` trên `VaultManager`.
-- Chỉ `SavingCore` nhận `CORE_ROLE` để gọi `payInterest`.
+- Chỉ `SavingCore` nhận `CORE_ROLE` để gọi `reserveInterest`, `releaseInterest` và `payInterest`.
 - Không có proxy hay upgrade path; địa chỉ được chốt khi deploy và contract không thể bị thay thế sau đó.
 
 Các câu hỏi thiết kế và giải thích đầy đủ nằm trong mục **Design Answers** của [README gốc](../README.md#design-answers).
