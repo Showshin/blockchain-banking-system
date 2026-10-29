@@ -1,6 +1,7 @@
 import { ArrowRight, Clock, Coins, ShieldCheck } from '@phosphor-icons/react'
 import { useI18n } from '../i18n/lang'
 import { formatBps, formatUsdc } from '../lib/format'
+import { sealTierFor } from '../lib/seal'
 import type { SavingPlan } from '../types'
 
 export function PlanCard({
@@ -13,13 +14,17 @@ export function PlanCard({
   onOpen: (plan: SavingPlan) => void
 }) {
   const { t, lang } = useI18n()
+  const tier = sealTierFor(plan.tenorDays)
   return (
-    <article className={'plan-card ' + (featured ? 'plan-card-featured' : '') + (plan.enabled ? '' : ' opacity-55')}>
+    <article className={'plan-card plan-card-tier-' + tier + ' ' + (featured ? 'plan-card-featured' : '') + (plan.enabled ? '' : ' opacity-55')}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className={'text-[10px] uppercase tracking-[0.18em] ' + (featured ? 'text-on-contrast/55' : 'text-muted')}>
-            {t.common.days(plan.tenorDays)}
-          </p>
+          <div className="flex items-center gap-2">
+            <span className="plan-tier-dot" aria-hidden="true" />
+            <p className={'text-[10px] uppercase tracking-[0.18em] ' + (featured ? 'text-on-contrast/55' : 'text-muted')}>
+              {t.common.days(plan.tenorDays)}
+            </p>
+          </div>
           <h3 className={'plan-title mt-2 text-xl font-medium tracking-[-0.035em] ' + (featured ? 'text-on-contrast' : 'text-ink')}>
             {plan.name[lang]}
           </h3>

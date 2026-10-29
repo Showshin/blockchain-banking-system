@@ -32,6 +32,13 @@ export const vi = {
     viewDeposits: 'Xem sổ của tôi',
     days: (n: number) => n + ' ngày',
     daysLeft: (n: number) => 'Còn ' + n + ' ngày',
+    daysHoursLeft: (days: number, hours: number) =>
+      'Còn ' + days + ' ngày' + (hours > 0 ? ' ' + hours + ' giờ' : ''),
+    hoursLeft: (hours: number, minutes: number) =>
+      'Còn ' + hours + ' giờ' + (minutes > 0 ? ' ' + minutes + ' phút' : ''),
+    minutesLeft: (minutes: number) => 'Còn ' + minutes + ' phút',
+    lessThanMinute: 'Còn dưới 1 phút',
+    matured: 'Đã đáo hạn',
     today: 'Hôm nay',
     apr: 'APR',
     processing: 'Đang xử lý…',
@@ -61,6 +68,13 @@ export const vi = {
     },
     planDescription: (tenorDays: number) =>
       `Gói on-chain ${tenorDays} ngày với APR và mức phạt được khóa khi mở sổ.`,
+  },
+  network: {
+    title: 'Ví đang ở sai mạng',
+    description: (chainId: string) =>
+      'Ứng dụng chỉ đọc và ghi trên Sepolia Testnet (ID ' + chainId + ').',
+    switching: 'Đang chuyển mạng…',
+    switchFailed: 'Không chuyển được mạng. Hãy chuyển thủ công trong ví rồi thử lại.',
   },
   plans: {
     eyebrow: 'Sản phẩm',
@@ -322,6 +336,13 @@ export const en: Messages = {
     viewDeposits: 'View my deposits',
     days: (n: number) => n + (n === 1 ? ' day' : ' days'),
     daysLeft: (n: number) => n + (n === 1 ? ' day left' : ' days left'),
+    daysHoursLeft: (days: number, hours: number) =>
+      days + 'd' + (hours > 0 ? ' ' + hours + 'h' : '') + ' left',
+    hoursLeft: (hours: number, minutes: number) =>
+      hours + 'h' + (minutes > 0 ? ' ' + minutes + 'm' : '') + ' left',
+    minutesLeft: (minutes: number) => minutes + ' min left',
+    lessThanMinute: 'Less than a minute left',
+    matured: 'Matured',
     today: 'Today',
     apr: 'APR',
     processing: 'Processing…',
@@ -351,6 +372,13 @@ export const en: Messages = {
     },
     planDescription: (tenorDays: number) =>
       `An on-chain ${tenorDays}-day plan with APR and penalty fixed when a deposit opens.`,
+  },
+  network: {
+    title: 'Wallet is on the wrong network',
+    description: (chainId: string) =>
+      'This app only reads and writes on chain Sepolia Testnet (ID ' + chainId + ').',
+    switching: 'Switching network…',
+    switchFailed: 'Could not switch networks. Switch manually in your wallet and try again.',
   },
   plans: {
     eyebrow: 'Products',

@@ -21,7 +21,7 @@ function errorCode(cause: unknown): number | undefined {
 }
 
 export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { state, connectWallet, disconnectWallet, refreshChain, chainLoading, chainError } = useBank()
+  const { state, connectWallet, disconnectWallet, refreshChain, chainLoading, chainError, networkMismatch } = useBank()
   const { toast } = useToast()
   const { t } = useI18n()
   const copy = t.walletDialog
@@ -96,6 +96,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   const connectedIcon = state.wallet.icon || ''
   const connectedName = state.wallet.name || copy.unknownWallet
+  const showDiscovery = discovering && wallets.length === 0
 
   return (
     <Modal
@@ -136,9 +137,13 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
                 <span className="connected-dot h-2 w-2 rounded-full" aria-label={copy.connected} />
               </div>
             </div>
-            {chainLoading || chainError ? (
+            {chainLoading || chainError || (networkMismatch && error) ? (
               <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">
-                {chainLoading ? copy.chainLoading : chainError}
+                {chainLoading
+                  ? copy.chainLoading
+                  : networkMismatch && error
+                    ? error
+                    : chainError}
               </p>
             ) : null}
             {chainError ? (
@@ -168,58 +173,68 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
           </div>
         ) : (
           <div className="mt-7 space-y-3">
-            {discovering ? (
-              <p className="rounded-xl border border-line px-3.5 py-3 text-xs text-muted" role="status">
-                {copy.discovering}
-              </p>
-            ) : null}
-
-            {wallets.map((wallet) => (
-              <button
-                key={wallet.uuid}
-                type="button"
-                className="wallet-option"
-                onClick={() => void connect(wallet)}
-                disabled={busyId !== null}
+            {showDiscovery ? (
+              <div
+                className="flex min-h-[220px] flex-col items-center justify-center"
+                role="status"
+                aria-live="polite"
               >
-                {wallet.icon ? (
-                  <img src={wallet.icon} alt="" className="h-9 w-9 shrink-0 rounded-lg object-contain" />
-                ) : (
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-paper">
-                    <Wallet size={18} weight="light" className="text-muted" />
-                  </span>
-                )}
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="block text-base font-medium">{wallet.name}</span>
-                  <span className="mt-0.5 block text-xs text-muted">
-                    {busyId === wallet.uuid
-                      ? copy.walletWaiting
-                      : copy.walletDescription(contractConfig?.chainId ?? 11155111)}
-                  </span>
-                </span>
-                <ArrowSquareOut size={17} weight="light" className="text-muted" />
-              </button>
-            ))}
-
-            {!discovering && wallets.length === 0 ? (
-              <div className="rounded-xl border border-line px-3.5 py-3 text-xs leading-relaxed text-muted">
-                {copy.errorNoWallet}
-                <button type="button" className="ml-2 underline" onClick={() => void scan()}>
-                  {copy.retry}
-                </button>
+                <span
+                  className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-ink"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">{copy.discovering}</span>
               </div>
-            ) : null}
+            ) : (
+              <>
+                {wallets.map((wallet) => (
+                  <button
+                    key={wallet.uuid}
+                    type="button"
+                    className="wallet-option"
+                    onClick={() => void connect(wallet)}
+                    disabled={busyId !== null}
+                  >
+                    {wallet.icon ? (
+                      <img src={wallet.icon} alt="" className="h-9 w-9 shrink-0 rounded-lg object-contain" />
+                    ) : (
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-paper">
+                        <Wallet size={18} weight="light" className="text-muted" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block text-base font-medium">{wallet.name}</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {busyId === wallet.uuid
+                          ? copy.walletWaiting
+                          : copy.walletDescription(contractConfig?.chainId ?? 11155111)}
+                      </span>
+                    </span>
+                    <ArrowSquareOut size={17} weight="light" className="text-muted" />
+                  </button>
+                ))}
 
-            {error ? (
-              <p role="alert" className="alert-danger rounded-xl border px-3.5 py-3 text-xs leading-relaxed">
-                {error}
-              </p>
-            ) : null}
+                {!discovering && wallets.length === 0 ? (
+                  <div className="rounded-xl border border-line px-3.5 py-3 text-xs leading-relaxed text-muted">
+                    {copy.errorNoWallet}
+                    <button type="button" className="ml-2 underline" onClick={() => void scan()}>
+                      {copy.retry}
+                    </button>
+                  </div>
+                ) : null}
 
-            <p className="flex gap-2 pt-2 text-xs leading-relaxed text-muted">
-              <ShieldCheck size={16} weight="light" className="mt-0.5 shrink-0 text-accent" />
-              {copy.noteContractSetup}
-            </p>
+                {error && !networkMismatch ? (
+                  <p role="alert" className="alert-danger rounded-xl border px-3.5 py-3 text-xs leading-relaxed">
+                    {error}
+                  </p>
+                ) : null}
+
+                <p className="flex gap-2 pt-2 text-xs leading-relaxed text-muted">
+                  <ShieldCheck size={16} weight="light" className="mt-0.5 shrink-0 text-accent" />
+                  {copy.noteContractSetup}
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

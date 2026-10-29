@@ -31,6 +31,7 @@ export interface BankContextValue {
   isChainMode: boolean
   chainLoading: boolean
   chainError: string | null
+  networkMismatch: boolean
   openDeposit: (planId: string, amount: number) => Promise<Deposit>
   withdrawDeposit: (depositId: string) => Promise<WithdrawReceipt>
   withdrawDepositPartial: (depositId: string, amount: number) => Promise<WithdrawReceipt>

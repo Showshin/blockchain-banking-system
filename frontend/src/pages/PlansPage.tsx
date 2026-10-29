@@ -7,7 +7,7 @@ import { useBank } from '../state/bank'
 import { useUi } from '../state/ui'
 
 export function PlansPage() {
-  const { state, isChainMode, chainLoading, chainError, refreshChain } = useBank()
+  const { state, isChainMode, chainLoading, chainError, networkMismatch, refreshChain } = useBank()
   const { openDeposit, openWallet } = useUi()
   const { t } = useI18n()
 
@@ -18,14 +18,26 @@ export function PlansPage() {
         title={t.plans.title}
         description={t.plans.description}
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => openDeposit()}>
-            {t.common.openDeposit}
-            <span className="btn-icon">
-              <ArrowRight size={15} weight="light" />
-            </span>
-          </button>
+          networkMismatch ? undefined : (
+            <button type="button" className="btn btn-primary" onClick={() => openDeposit()}>
+              {t.common.openDeposit}
+              <span className="btn-icon">
+                <ArrowRight size={15} weight="light" />
+              </span>
+            </button>
+          )
         }
       />
+
+      {isChainMode && chainLoading && state.plans.length > 0 ? (
+        <p className="mb-3 flex items-center gap-2 text-[11px] text-muted" role="status">
+          <span
+            className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent"
+            aria-hidden="true"
+          />
+          {t.chain.loading}
+        </p>
+      ) : null}
 
       {!state.wallet.connected ? (
         <EmptyState
@@ -44,7 +56,7 @@ export function PlansPage() {
           <div className="mt-7 h-10 w-2/3 rounded-full bg-paper-deep" />
           <div className="mt-4 h-4 w-1/2 rounded-full bg-paper-deep" />
         </div>
-      ) : isChainMode && chainError && state.plans.length === 0 ? (
+      ) : isChainMode && chainError && !networkMismatch && !chainLoading && state.plans.length === 0 ? (
         <div className="panel px-6 py-8" role="alert">
           <WarningCircle size={22} weight="light" className="text-muted" />
           <h2 className="mt-3 text-lg font-medium">{t.chain.errorTitle}</h2>
@@ -54,7 +66,7 @@ export function PlansPage() {
             {t.chain.retry}
           </button>
         </div>
-      ) : state.plans.length > 0 ? (
+      ) : networkMismatch ? null : state.plans.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {state.plans.map((plan) => (
             <PlanCard

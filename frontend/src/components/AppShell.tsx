@@ -1,7 +1,8 @@
-import { BookOpen, CaretUp, Check, GearSix, Stack, Wallet } from '@phosphor-icons/react'
+import { ArrowClockwise, BookOpen, CaretUp, Check, GearSix, Stack, Wallet, WarningCircle } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
+import { ensureTargetNetwork, targetChainId } from '../contracts/wallet'
 import { useI18n } from '../i18n/lang'
 import { formatAddress } from '../lib/format'
 import { useBank } from '../state/bank'
@@ -165,6 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </header>
 
           <main className="mx-auto w-full max-w-[1180px] px-4 pb-16 pt-7 sm:px-6 lg:px-10 lg:pb-20 lg:pt-12">
+            <NetworkBanner />
             <div ref={pageRef}>{children}</div>
           </main>
         </div>
@@ -213,6 +215,70 @@ function WalletButton({
         />
       ) : null}
     </button>
+  )
+}
+
+function NetworkBanner() {
+  const { networkMismatch, chainLoading, refreshChain } = useBank()
+  const { t } = useI18n()
+  const [switching, setSwitching] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+
+  if (!networkMismatch) return null
+
+  const handleSwitch = async () => {
+    setSwitching(true)
+    setSwitchError(null)
+    try {
+      await ensureTargetNetwork()
+      await refreshChain()
+    } catch {
+      setSwitchError(t.network.switchFailed)
+    } finally {
+      setSwitching(false)
+    }
+  }
+
+  return (
+    <div role="alert" className="alert-warning mb-5 rounded-[16px] border px-4 py-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 gap-3">
+          {chainLoading ? (
+            <span
+              className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border border-current border-t-transparent"
+              aria-hidden="true"
+            />
+          ) : (
+            <WarningCircle size={18} weight="light" className="mt-0.5 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{t.network.title}</p>
+            <p className="mt-1 text-[11px] leading-relaxed opacity-85">
+              {t.network.description(String(targetChainId()))}
+            </p>
+            {switchError ? <p className="mt-1 text-[11px] font-medium">{switchError}</p> : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-small btn-secondary self-start sm:shrink-0 sm:self-auto"
+          onClick={() => void handleSwitch()}
+          disabled={switching || chainLoading}
+        >
+          {switching ? (
+            <>
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+              {t.network.switching}
+            </>
+          ) : (
+            <>
+              <ArrowClockwise size={14} weight="light" />
+              {t.walletDialog.switchNetwork}
+            </>
+          )}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -2,14 +2,16 @@ import { ArrowClockwise, ArrowRight, ArrowSquareOut, Plus, SealCheck } from '@ph
 import { contractConfig } from '../contracts/config'
 import { useI18n } from '../i18n/lang'
 import { depositProgress, interestEarned, isClaimable, isMatured } from '../lib/bank'
-import { nowDate } from '../lib/clock'
-import { daysBetween, formatBps, formatDate, formatDateTime, formatUsdc } from '../lib/format'
+import { remainingLabel, remainingTime } from '../lib/countdown'
+import { formatBps, formatDate, formatDateTime, formatUsdc } from '../lib/format'
+import { sealTierFor, type SealTier } from '../lib/seal'
 import type { Deposit, SavingPlan } from '../types'
 import { StatusBadge } from './StatusBadge'
 
 export function CertificateCard({
   deposit,
   plan,
+  now,
   onWithdraw,
   onRenew,
   onTopUp,
@@ -17,6 +19,7 @@ export function CertificateCard({
 }: {
   deposit: Deposit
   plan?: SavingPlan
+  now: number
   onWithdraw: (deposit: Deposit) => void
   onRenew: (deposit: Deposit) => void
   onTopUp: (deposit: Deposit) => void
@@ -25,10 +28,11 @@ export function CertificateCard({
   const { t, lang } = useI18n()
   const copy = t.deposits.certificate
   const claimable = isClaimable(deposit)
-  const matured = isMatured(deposit)
-  const progress = claimable ? 1 : depositProgress(deposit)
+  const matured = isMatured(deposit, now)
+  const progress = claimable ? 1 : depositProgress(deposit, now)
   const interest = claimable ? deposit.pendingInterest : interestEarned(deposit)
-  const daysLeft = daysBetween(nowDate(), deposit.maturityAt)
+  const remaining = remainingTime(now, deposit.maturityAt)
+  const tier = sealTierFor(deposit.tenorDays)
   const status = claimable ? 'pending' : matured ? 'matured' : 'active'
   const explorerHref =
     contractConfig?.chainId === 11155111
@@ -42,7 +46,7 @@ export function CertificateCard({
     ? copy.principalReturned
     : matured
       ? copy.matured
-      : copy.progress + ' · ' + t.common.daysLeft(daysLeft)
+      : copy.progress + ' · ' + remainingLabel(remaining, t)
 
   return (
     <article className="certificate">
@@ -72,7 +76,7 @@ export function CertificateCard({
               <span className="font-medium text-accent">+{formatUsdc(interest)} USDC</span>
             </p>
           </div>
-          <CertificateSeal />
+          <CertificateSeal tier={tier} />
         </div>
 
         <div className="mt-7 grid grid-cols-3 gap-3 border-t border-line/80 pt-4">
@@ -194,9 +198,9 @@ function Meta({ label, value }: { label: string; value: string }) {
   )
 }
 
-function CertificateSeal() {
+function CertificateSeal({ tier }: { tier: SealTier }) {
   return (
-    <span className="certificate-seal" aria-hidden="true">
+    <span className={`certificate-seal certificate-seal-${tier}`} aria-hidden="true">
       <span className="certificate-seal-ring" />
       <span className="certificate-seal-core">
         <span>TÍCH</span>

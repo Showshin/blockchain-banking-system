@@ -8,6 +8,7 @@ import { useBank } from '../state/bank'
 import { useToast } from '../state/toast'
 import { useUi } from '../state/ui'
 import { Modal, ModalClose } from './Modal'
+import { TxSuccess } from './TxSuccess'
 
 export type ActionMode = 'withdraw' | 'renew' | 'topup' | 'claim'
 
@@ -49,6 +50,7 @@ export function ActionDialog({
   const [topUpAmount, setTopUpAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<{ title: string; message: string } | null>(null)
   const [confirmInput, setConfirmInput] = useState('')
   const selectedPlanId = enabledPlans.some((plan) => plan.id === newPlanId)
     ? newPlanId
@@ -142,71 +144,77 @@ export function ActionDialog({
     setError(null)
     setBusy(true)
     await new Promise((resolve) => window.setTimeout(resolve, 620))
+    let successTitle = ''
+    let successMessage = ''
+    let successTone: 'success' | 'info' = 'success'
+    const showSuccess = (title: string, message: string, tone: 'success' | 'info' = 'success') => {
+      successTitle = title
+      successMessage = message
+      successTone = tone
+    }
     try {
       if (mode === 'withdraw') {
         const receipt = isPartial
           ? await withdrawDepositPartial(deposit.id, parsedWithdraw)
           : await withdrawDeposit(deposit.id)
         if (receipt.kind === 'mature' && receipt.pendingInterest > 0) {
-          toast({
-            title: copy.toastDeferred,
-            message: copy.toastDeferredMessage(
+          showSuccess(
+            copy.toastDeferred,
+            copy.toastDeferredMessage(
               formatUsdc(receipt.payout),
               formatUsdc(receipt.pendingInterest),
             ),
-            tone: 'info',
-          })
+            'info',
+          )
         } else {
-          toast({
-            title:
-              receipt.kind === 'partial'
-                ? copy.toastPartial
-                : receipt.kind === 'mature'
-                  ? copy.toastSettled
-                  : copy.toastEarly,
-            message:
-              receipt.kind === 'partial'
-                ? copy.toastPartialMessage(
-                    formatUsdc(receipt.payout),
-                    formatUsdc(receipt.remainingPrincipal),
-                  )
-                : copy.toastReceived(
-                    formatUsdc(receipt.payout),
-                    receipt.penalty > 0 ? formatUsdc(receipt.penalty) : '',
-                  ),
-            tone: receipt.kind === 'mature' ? 'success' : 'info',
-          })
+          showSuccess(
+            receipt.kind === 'partial'
+              ? copy.toastPartial
+              : receipt.kind === 'mature'
+                ? copy.toastSettled
+                : copy.toastEarly,
+            receipt.kind === 'partial'
+              ? copy.toastPartialMessage(
+                  formatUsdc(receipt.payout),
+                  formatUsdc(receipt.remainingPrincipal),
+                )
+              : copy.toastReceived(
+                  formatUsdc(receipt.payout),
+                  receipt.penalty > 0 ? formatUsdc(receipt.penalty) : '',
+                ),
+            receipt.kind === 'mature' ? 'success' : 'info',
+          )
         }
       } else if (mode === 'renew') {
         if (!renewPlan) throw new Error(t.errors.renewPlanUnavailable)
         const created = await renewDeposit(deposit.id, renewPlan.id)
-        toast({
-          title: copy.toastRenewed(created.certificateNo),
-          message: copy.toastRenewedMessage(
+        showSuccess(
+          copy.toastRenewed(created.certificateNo),
+          copy.toastRenewedMessage(
             formatUsdc(created.principal),
             formatDate(created.maturityAt, lang),
           ),
-          tone: 'success',
-        })
+        )
       } else if (mode === 'topup') {
         const receipt = await topUpDeposit(deposit.id, parsedTopUp)
-        toast({
-          title: copy.toastToppedUp,
-          message: copy.toastToppedUpMessage(
+        showSuccess(
+          copy.toastToppedUp,
+          copy.toastToppedUpMessage(
             formatUsdc(receipt.amount),
             formatUsdc(receipt.newPrincipal),
             formatUsdc(receipt.interestAdded),
           ),
-          tone: 'success',
-        })
+        )
       } else {
         if (!claimable) throw new Error(copy.claimUnavailable)
         const receipt = await claimInterest(deposit.id)
-        toast({
-          title: copy.toastClaimed,
-          message: copy.toastClaimedMessage(formatUsdc(receipt.interest)),
-          tone: 'success',
-        })
+        showSuccess(copy.toastClaimed, copy.toastClaimedMessage(formatUsdc(receipt.interest)))
+      }
+
+      if (successTitle) {
+        setSuccess({ title: successTitle, message: successMessage })
+        await new Promise((resolve) => window.setTimeout(resolve, 1100))
+        toast({ title: successTitle, message: successMessage, tone: successTone })
       }
       onClose()
     } catch (cause) {
@@ -272,7 +280,7 @@ export function ActionDialog({
       size="sm"
       closeDisabled={busy}
     >
-      <div className="p-5 sm:p-6">
+      <div className="relative p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="eyebrow">{copy.eyebrow(deposit.certificateNo)}</p>
@@ -635,6 +643,7 @@ export function ActionDialog({
             )}
           </button>
         </div>
+        {success ? <TxSuccess title={success.title} message={success.message} /> : null}
       </div>
     </Modal>
   )

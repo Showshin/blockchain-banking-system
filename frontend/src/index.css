@@ -422,7 +422,30 @@
   }
 
   .connected-dot {
+    position: relative;
     background: #3c8a5b;
+  }
+
+  .connected-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: connected-pulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    pointer-events: none;
+  }
+
+  @keyframes connected-pulse {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    70%,
+    100% {
+      transform: scale(2.3);
+      opacity: 0;
+    }
   }
 
   .plan-badge-popular {
@@ -615,7 +638,7 @@
     height: 64px;
     flex: 0 0 64px;
     place-items: center;
-    border: 1.5px solid var(--color-accent);
+    border: 1.5px solid currentColor;
     border-radius: 50%;
     color: var(--color-accent);
     transform: rotate(-9deg);
@@ -646,6 +669,63 @@
     opacity: 0.65;
   }
 
+  .certificate-seal-bronze {
+    color: #a9714b;
+  }
+
+  .certificate-seal-silver {
+    color: #8b96a3;
+  }
+
+  .certificate-seal-gold {
+    color: #b8901f;
+    box-shadow: 0 0 10px color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  .certificate-seal-diamond {
+    color: #5f9fb4;
+    background: radial-gradient(
+      circle at 35% 30%,
+      color-mix(in srgb, currentColor 12%, transparent),
+      transparent 68%
+    );
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, currentColor 18%, transparent),
+      0 0 14px color-mix(in srgb, currentColor 16%, transparent);
+  }
+
+  .certificate-seal-emerald {
+    color: #2f8f6b;
+    background: radial-gradient(
+      circle at 35% 30%,
+      color-mix(in srgb, currentColor 14%, transparent),
+      transparent 68%
+    );
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, currentColor 20%, transparent),
+      0 0 18px color-mix(in srgb, currentColor 18%, transparent);
+  }
+
+  html[data-theme="dark"] .certificate-seal-bronze {
+    color: #c98f63;
+  }
+
+  html[data-theme="dark"] .certificate-seal-silver {
+    color: #b9c3cc;
+  }
+
+  html[data-theme="dark"] .certificate-seal-gold {
+    color: #d8b24a;
+  }
+
+  html[data-theme="dark"] .certificate-seal-diamond {
+    color: #a9d8e6;
+  }
+
+  html[data-theme="dark"] .certificate-seal-emerald {
+    color: #5fc79a;
+  }
+
   @media (max-width: 359px) {
     .certificate-seal {
       width: 48px;
@@ -659,6 +739,7 @@
   }
 
   .plan-card {
+    --plan-tier: var(--color-line);
     position: relative;
     overflow: hidden;
     padding: 22px;
@@ -680,6 +761,57 @@
   .plan-card:hover {
     border-color: color-mix(in srgb, var(--color-ink) 18%, var(--color-line));
     transform: translateY(-2px);
+  }
+
+  .plan-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--plan-tier);
+    opacity: 0.8;
+  }
+
+  .plan-card-tier-bronze {
+    --plan-tier: #a9714b;
+  }
+
+  .plan-card-tier-silver {
+    --plan-tier: #8b96a3;
+  }
+
+  .plan-card-tier-gold {
+    --plan-tier: #b8901f;
+  }
+
+  .plan-card-tier-diamond {
+    --plan-tier: #5f9fb4;
+  }
+
+  .plan-card-tier-emerald {
+    --plan-tier: #2f8f6b;
+  }
+
+  html[data-theme="dark"] .plan-card-tier-bronze {
+    --plan-tier: #c98f63;
+  }
+
+  html[data-theme="dark"] .plan-card-tier-silver {
+    --plan-tier: #b9c3cc;
+  }
+
+  html[data-theme="dark"] .plan-card-tier-gold {
+    --plan-tier: #d8b24a;
+  }
+
+  html[data-theme="dark"] .plan-card-tier-diamond {
+    --plan-tier: #a9d8e6;
+  }
+
+  html[data-theme="dark"] .plan-card-tier-emerald {
+    --plan-tier: #5fc79a;
   }
 
   .plan-card-featured {
@@ -704,6 +836,15 @@
   .plan-badge {
     min-width: 76px;
     white-space: nowrap;
+  }
+
+  .plan-tier-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: var(--plan-tier);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--plan-tier) 16%, transparent);
   }
 
   .plan-description {

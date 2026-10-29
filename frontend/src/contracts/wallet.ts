@@ -179,7 +179,7 @@ export async function restoreInjectedWallet(): Promise<{ wallet: WalletInfo; add
 
 export function subscribeWalletEvents(handlers: {
   onAccountsChanged: (address: string | null) => void
-  onChainChanged: () => void
+  onChainChanged: (chainId: string | null) => void
 }): () => void {
   const provider = active?.provider ?? window.ethereum
   if (!provider?.on || !provider.removeListener) return () => {}
@@ -187,7 +187,10 @@ export function subscribeWalletEvents(handlers: {
     const next = Array.isArray(args[0]) ? args[0][0] : undefined
     handlers.onAccountsChanged(typeof next === 'string' && next ? next : null)
   }
-  const chainListener = () => handlers.onChainChanged()
+  const chainListener = (...args: unknown[]) => {
+    const next = typeof args[0] === 'string' ? args[0] : null
+    handlers.onChainChanged(next)
+  }
   provider.on('accountsChanged', accountsListener)
   provider.on('chainChanged', chainListener)
   return () => {

@@ -11,6 +11,7 @@ import { useBank } from '../state/bank'
 import { useToast } from '../state/toast'
 import { useUi } from '../state/ui'
 import type { Deposit } from '../types'
+import { TxSuccess } from './TxSuccess'
 
 type Stage = 'form' | 'pending' | 'done'
 
@@ -33,6 +34,7 @@ export function DepositDialog({
   const [stage, setStage] = useState<Stage>('form')
   const [created, setCreated] = useState<Deposit | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<{ title: string; message: string } | null>(null)
   const amountInputRef = useRef<HTMLInputElement>(null)
   const doneTitleRef = useRef<HTMLHeadingElement>(null)
   const dialogRef = useDialogFocus<HTMLElement>({
@@ -94,13 +96,17 @@ export function DepositDialog({
     await new Promise((resolve) => window.setTimeout(resolve, 720))
     try {
       const deposit = await openDeposit(plan.id, parsedAmount)
+      const successTitle = copy.toastTitle(deposit.certificateNo)
+      const successMessage = copy.toastMessage(
+        formatUsdc(deposit.principal),
+        formatDate(deposit.maturityAt, lang),
+      )
+      setSuccess({ title: successTitle, message: successMessage })
+      await new Promise((resolve) => window.setTimeout(resolve, 1100))
+      setSuccess(null)
+      toast({ title: successTitle, message: successMessage, tone: 'success' })
       setCreated(deposit)
       setStage('done')
-      toast({
-        title: copy.toastTitle(deposit.certificateNo),
-        message: copy.toastMessage(formatUsdc(deposit.principal), formatDate(deposit.maturityAt, lang)),
-        tone: 'success',
-      })
     } catch (cause) {
       setStage('form')
       const message = cause instanceof Error ? cause.message : copy.errorGeneric
@@ -349,6 +355,7 @@ export function DepositDialog({
                 </form>
               )}
             </div>
+            {success ? <TxSuccess title={success.title} message={success.message} /> : null}
           </motion.section>
         </motion.div>
       ) : null}

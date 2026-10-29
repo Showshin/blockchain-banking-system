@@ -77,7 +77,7 @@ Only public addresses and the chain ID live in `VITE_*` variables; the private k
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask (or another injected wallet enabled in the browser) and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). If the wallet does not have Sepolia yet, the interface offers to add it; if the wallet is on another network, open the wallet dialog and choose **Switch to Sepolia**.
+Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask (or another injected wallet enabled in the browser) and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). If the wallet does not have Sepolia yet, the interface offers to add it; if the wallet is on another network, a wrong-network banner appears immediately on both pages, clears stale data and offers **Switch to Sepolia**; no reload is needed.
 
 Add the token to show the balance next to the wallet address: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC is the token used for testing and its `mint` function is public, so a wallet with no funds can still receive tokens: call `mint` on Etherscan Write Contract with the amount in 6 decimals (1,000 USDC = `1000000000`). The wallet also needs Sepolia ETH to pay gas; faucet lists are in chainlist or at [sepoliafaucet.com](https://sepoliafaucet.com).
 

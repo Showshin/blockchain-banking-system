@@ -63,10 +63,6 @@ export function formatAddress(address: string | null): string {
   return address.slice(0, 6) + '…' + address.slice(-4)
 }
 
-export function daysBetween(from: string | number | Date, to: string | number | Date): number {
-  return Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
-}
-
 export function parseAmount(value: string): number {
   const normalized = value.replace(/\s/g, '').replace(/,/g, '.')
   const parsed = Number.parseFloat(normalized)

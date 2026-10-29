@@ -17,6 +17,7 @@ import {
   getActiveWallet,
   restoreInjectedWallet,
   subscribeWalletEvents,
+  targetChainId,
 } from '../contracts/wallet'
 
 
@@ -36,6 +37,12 @@ function causeMessage(cause: unknown): string {
     if (typeof value === 'string') return value
   }
   return ''
+}
+
+function chainIdFromHex(value: string | null): number | null {
+  if (!value) return null
+  const parsed = value.startsWith('0x') ? Number.parseInt(value, 16) : Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
 function translateChainError(cause: unknown, t: Messages): Error {
@@ -77,17 +84,21 @@ export function BankProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BankState>(emptyBankState)
   const [chainLoading, setChainLoading] = useState(false)
   const [chainError, setChainError] = useState<string | null>(null)
+  const [networkMismatch, setNetworkMismatch] = useState(false)
   const address = state.wallet.address
   const isChainMode = hasContractConfig && state.wallet.connected
 
   const refreshChain = useCallback(async () => {
     if (!isChainMode || !address) {
       setChainError(null)
+      setNetworkMismatch(false)
       return
     }
     setChainLoading(true)
     try {
-      const { loadChainSnapshot } = await import('../contracts/adapter')
+      const { assertConfiguredNetwork, loadChainSnapshot } = await import('../contracts/adapter')
+      await assertConfiguredNetwork()
+      setNetworkMismatch(false)
       const snapshot = await loadChainSnapshot(address)
       setState((current) => {
         if (current.wallet.address?.toLowerCase() !== address.toLowerCase()) return current
@@ -102,6 +113,19 @@ export function BankProvider({ children }: { children: ReactNode }) {
       setChainError(null)
     } catch (cause) {
       console.error('Chain refresh failed', cause)
+      if (causeMessage(cause).startsWith('WRONG_NETWORK:')) {
+        setNetworkMismatch(true)
+        setState((current) => {
+          if (current.wallet.address?.toLowerCase() !== address.toLowerCase()) return current
+          return {
+            ...current,
+            plans: [],
+            deposits: [],
+            wallet: { ...current.wallet, balance: 0 },
+            vault: { balance: 0 },
+          }
+        })
+      }
       setChainError(translateChainError(cause, t).message)
     } finally {
       setChainLoading(false)
@@ -269,6 +293,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
 
   const connectWallet = useCallback((nextAddress: string, identity?: WalletIdentity) => {
     setChainError(null)
+    setNetworkMismatch(false)
     setState({
       ...emptyBankState(),
       wallet: {
@@ -285,6 +310,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
   const disconnectWallet = useCallback(() => {
     clearWallet()
     setChainError(null)
+    setNetworkMismatch(false)
     setState(emptyBankState())
   }, [])
 
@@ -320,7 +346,22 @@ export function BankProvider({ children }: { children: ReactNode }) {
           rdns: wallet?.rdns ?? '',
         })
       },
-      onChainChanged: () => {
+      onChainChanged: (chainId) => {
+        const actual = chainIdFromHex(chainId)
+        if (actual !== null) {
+          if (actual !== targetChainId()) {
+            setNetworkMismatch(true)
+            setState((current) => ({
+              ...current,
+              plans: [],
+              deposits: [],
+              wallet: { ...current.wallet, balance: 0 },
+              vault: { balance: 0 },
+            }))
+          } else {
+            setNetworkMismatch(false)
+          }
+        }
         void refreshChain()
       },
     })
@@ -332,6 +373,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       isChainMode,
       chainLoading,
       chainError,
+      networkMismatch,
       openDeposit,
       withdrawDeposit,
       withdrawDepositPartial,
@@ -347,6 +389,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       isChainMode,
       chainLoading,
       chainError,
+      networkMismatch,
       openDeposit,
       withdrawDeposit,
       withdrawDepositPartial,
