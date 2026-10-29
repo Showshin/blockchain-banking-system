@@ -403,6 +403,19 @@ export const VaultManagerAbi = [
       {
         "indexed": true,
         "internalType": "address",
+        "name": "core",
+        "type": "address"
+      }
+    ],
+    "name": "CoreRoleLocked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "previousReceiver",
         "type": "address"
       },
@@ -666,6 +679,19 @@ export const VaultManagerAbi = [
   },
   {
     "inputs": [],
+    "name": "core",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "feeReceiver",
     "outputs": [
       {
@@ -860,6 +886,19 @@ export const VaultManagerAbi = [
       }
     ],
     "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "core_",
+        "type": "address"
+      }
+    ],
+    "name": "setCoreOnce",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

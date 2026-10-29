@@ -35,7 +35,7 @@ export async function deployBankFixture(
     GRACE_PERIOD_SECONDS,
   ])) as unknown as Contract;
 
-  await vault.grantRole(await vault.CORE_ROLE(), core.target);
+  await vault.setCoreOnce(core.target);
 
   await token.mint(admin.address, USDC(50_000));
   await token.mint(depositor.address, USDC(100_000));

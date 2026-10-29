@@ -8,7 +8,9 @@ docs/
 .env
 .env.*
 !.env.example
-contracts/deployments/localhost.json
+contracts/deployments/*.partial.json
+contracts/deployments/*.e2e.json
+contracts/deployments/*.dryrun.json
 *.log
 .DS_Store
 

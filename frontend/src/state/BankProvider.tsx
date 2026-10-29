@@ -53,6 +53,7 @@ function translateChainError(cause: unknown, t: Messages): Error {
     ['Core: no pending interest', t.errors.noPendingInterest],
     ['Core: invalid amount', t.errors.invalidAmount],
     ['Vault: interest not reserved', t.errors.interestNotReserved],
+    ['Vault: reserve exceeds balance', t.errors.vaultReserveExceedsBalance],
     ['Vault: reserved interest', t.errors.vaultProtected],
     ['Vault: undercollateralized', t.errors.vaultProtected],
     ['Vault: release exceeds reserved', t.errors.vaultProtected],

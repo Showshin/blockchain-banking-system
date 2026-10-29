@@ -23,6 +23,23 @@ const dateFormatters: Record<Lang, Intl.DateTimeFormat> = {
   }),
 }
 
+const dateTimeFormatters: Record<Lang, Intl.DateTimeFormat> = {
+  vi: new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+  en: new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+}
+
 export function formatUsdc(value: number, compact = false): string {
   if (compact && Math.abs(value) >= 10_000) return compactFormatter.format(value)
   return usdcFormatter.format(value)
@@ -35,6 +52,10 @@ export function formatBps(bps: number): string {
 
 export function formatDate(value: string | number | Date, lang: Lang = 'vi'): string {
   return dateFormatters[lang].format(new Date(value))
+}
+
+export function formatDateTime(value: string | number | Date, lang: Lang = 'vi'): string {
+  return dateTimeFormatters[lang].format(new Date(value))
 }
 
 export function formatAddress(address: string | null): string {

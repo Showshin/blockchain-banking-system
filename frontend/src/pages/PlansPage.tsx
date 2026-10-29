@@ -55,7 +55,7 @@ export function PlansPage() {
           </button>
         </div>
       ) : state.plans.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {state.plans.map((plan) => (
             <PlanCard
               key={plan.id}

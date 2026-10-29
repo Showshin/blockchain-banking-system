@@ -21,12 +21,16 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
     /// @notice Interest promised to active deposits. It cannot be withdrawn by the admin.
     uint256 public reservedInterest;
 
+    /// @notice The only SavingCore contract allowed to reserve, release and pay interest.
+    address public core;
+
     event VaultFunded(address indexed funder, uint256 amount);
     event VaultWithdrawn(address indexed recipient, uint256 amount);
     event FeeReceiverUpdated(address indexed previousReceiver, address indexed newReceiver);
     event InterestReserved(uint256 amount, uint256 totalReserved);
     event InterestReleased(uint256 amount, uint256 totalReserved);
     event InterestPaid(address indexed recipient, uint256 amount);
+    event CoreRoleLocked(address indexed core);
 
     constructor(address asset_, address admin_, address feeReceiver_) {
         require(asset_ != address(0), "Vault: zero asset");
@@ -37,6 +41,21 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
         feeReceiver = feeReceiver_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         _grantRole(PAUSER_ROLE, admin_);
+    }
+
+    /// @notice Grants CORE_ROLE to SavingCore once and freezes CORE_ROLE administration.
+    /// @dev After this call, DEFAULT_ADMIN_ROLE can no longer grant or revoke CORE_ROLE.
+    function setCoreOnce(address core_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(core == address(0), "Vault: core already set");
+        require(
+            core_ != address(0) && core_ != address(this) && core_.code.length > 0,
+            "Vault: invalid core"
+        );
+
+        core = core_;
+        _grantRole(CORE_ROLE, core_);
+        _setRoleAdmin(CORE_ROLE, CORE_ROLE);
+        emit CoreRoleLocked(core_);
     }
 
     function fundVault(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -62,10 +81,15 @@ contract VaultManager is AccessControl, Pausable, IVaultManager {
         emit FeeReceiverUpdated(previousReceiver, nextReceiver);
     }
 
-    function reserveInterest(uint256 amount) external onlyRole(CORE_ROLE) {
+    function reserveInterest(uint256 amount) external onlyRole(CORE_ROLE) whenNotPaused {
         require(amount > 0, "Vault: zero amount");
-        reservedInterest += amount;
-        emit InterestReserved(amount, reservedInterest);
+        uint256 nextReserved = reservedInterest + amount;
+        require(
+            nextReserved <= asset.balanceOf(address(this)),
+            "Vault: reserve exceeds balance"
+        );
+        reservedInterest = nextReserved;
+        emit InterestReserved(amount, nextReserved);
     }
 
     function releaseInterest(uint256 amount) external onlyRole(CORE_ROLE) {

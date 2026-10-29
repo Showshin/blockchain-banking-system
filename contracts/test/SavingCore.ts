@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import type { Contract } from "ethers";
 import { network } from "hardhat";
 import {
   DEFAULT_APR_BPS,
@@ -16,7 +17,6 @@ import {
 const { ethers, networkHelpers } = await network.create();
 const { time } = networkHelpers;
 const deployBankFixture = () => createBankFixture(ethers);
-const deployShortVaultFixture = () => createBankFixture(ethers, { vaultFunding: USDC(1) });
 const loadFixture = networkHelpers.loadFixture;
 
 const ACTIVE = 1n;
@@ -24,6 +24,18 @@ const WITHDRAWN = 2n;
 const MANUAL_RENEWED = 3n;
 const AUTO_RENEWED = 4n;
 const PRINCIPAL_WITHDRAWN = 5n;
+
+async function drainVault(vault: Contract, token: Contract, recipient: string) {
+  const balance = (await token.balanceOf(vault.target)) as bigint;
+  if (balance === 0n) return;
+
+  const vaultAddress = vault.target as string;
+  await networkHelpers.impersonateAccount(vaultAddress);
+  await networkHelpers.setBalance(vaultAddress, 10n ** 18n);
+  const vaultSigner = await ethers.getSigner(vaultAddress);
+  await (token.connect(vaultSigner) as Contract).transfer(recipient, balance);
+  await networkHelpers.stopImpersonatingAccount(vaultAddress);
+}
 
 describe("SavingCore", function () {
   describe("plans", function () {
@@ -511,10 +523,11 @@ describe("SavingCore", function () {
     });
 
     it("pays principal and defers interest when the vault cannot pay", async function () {
-      const { core, token, vault, depositor } = await loadFixture(deployShortVaultFixture);
+      const { core, token, vault, depositor, outsider } = await loadFixture(deployBankFixture);
       const principal = USDC(1_000);
       const { depositId, deposit } = await openDeposit(core, depositor, principal);
       const interest = await core.interestAtMaturity(depositId);
+      await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(deposit.maturityAt));
       const userBefore = await token.balanceOf(depositor.address);
 
@@ -533,9 +546,12 @@ describe("SavingCore", function () {
     });
 
     it("lets the owner claim deferred interest once the vault is funded", async function () {
-      const { core, token, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
+      const { core, token, vault, admin, depositor, outsider } = await loadFixture(
+        deployBankFixture,
+      );
       const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
       const interest = await core.interestAtMaturity(depositId);
+      await drainVault(vault, token, outsider.address);
 
       await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
         "Core: no pending interest",
@@ -560,11 +576,12 @@ describe("SavingCore", function () {
     });
 
     it("moves the deferred interest claim with the certificate", async function () {
-      const { core, vault, admin, depositor, recipient } = await loadFixture(
-        deployShortVaultFixture,
+      const { core, token, vault, admin, depositor, recipient, outsider } = await loadFixture(
+        deployBankFixture,
       );
       const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
       const interest = await core.interestAtMaturity(depositId);
+      await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(deposit.maturityAt));
       await withSigner(core, depositor).withdrawAtMaturity(depositId);
       await withSigner(core, depositor).transferFrom(
@@ -583,8 +600,9 @@ describe("SavingCore", function () {
     });
 
     it("blocks claiming deferred interest while paused", async function () {
-      const { core, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
+      const { core, token, vault, admin, depositor, outsider } = await loadFixture(deployBankFixture);
       const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(deposit.maturityAt));
       await withSigner(core, depositor).withdrawAtMaturity(depositId);
       await withSigner(vault, admin).fundVault(USDC(100));
@@ -599,8 +617,9 @@ describe("SavingCore", function () {
     });
 
     it("keeps a deferred-interest certificate inactive for maturity exit", async function () {
-      const { core, vault, admin, depositor } = await loadFixture(deployShortVaultFixture);
+      const { core, token, vault, admin, depositor, outsider } = await loadFixture(deployBankFixture);
       const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(deposit.maturityAt));
       await withSigner(core, depositor).withdrawAtMaturity(depositId);
 
@@ -808,9 +827,10 @@ describe("SavingCore", function () {
     });
 
     it("keeps both renewal paths active and un-minted when the vault is short", async function () {
-      const { core, depositor } = await loadFixture(deployShortVaultFixture);
+      const { core, token, vault, depositor, outsider } = await loadFixture(deployBankFixture);
       const manual = await openDeposit(core, depositor, USDC(1_000));
       const automatic = await openDeposit(core, depositor, USDC(1_000));
+      await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(automatic.deposit.maturityAt + GRACE_PERIOD_SECONDS));
       const nextDepositId = await core.nextDepositId();
 

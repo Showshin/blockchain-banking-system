@@ -55,16 +55,11 @@ export default defineConfig({
     },
   },
   networks: {
+    // In-process network for unit tests only; no deploy or verify script targets it.
     hardhatMainnet: {
       type: "edr-simulated",
       chainType: "l1",
       chainId: 31337,
-    },
-    localhost: {
-      type: "http",
-      chainType: "l1",
-      chainId: 31337,
-      url: "http://127.0.0.1:8545",
     },
     testnet: {
       type: "http",

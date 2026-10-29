@@ -3,7 +3,7 @@ import { contractConfig } from '../contracts/config'
 import { useI18n } from '../i18n/lang'
 import { depositProgress, interestEarned, isClaimable, isMatured } from '../lib/bank'
 import { nowDate } from '../lib/clock'
-import { daysBetween, formatBps, formatDate, formatUsdc } from '../lib/format'
+import { daysBetween, formatBps, formatDate, formatDateTime, formatUsdc } from '../lib/format'
 import type { Deposit, SavingPlan } from '../types'
 import { StatusBadge } from './StatusBadge'
 
@@ -78,7 +78,14 @@ export function CertificateCard({
         <div className="mt-7 grid grid-cols-3 gap-3 border-t border-line/80 pt-4">
           <Meta label={copy.plan} value={plan ? plan.name[lang] : t.common.noPlan} />
           <Meta label={copy.lockedApr} value={formatBps(deposit.aprBpsAtOpen)} />
-          <Meta label={copy.maturity} value={formatDate(deposit.maturityAt, lang)} />
+          <Meta
+            label={copy.maturity}
+            value={
+              deposit.tenorDays < 2
+                ? formatDateTime(deposit.maturityAt, lang)
+                : formatDate(deposit.maturityAt, lang)
+            }
+          />
         </div>
 
         <div className="mt-5">

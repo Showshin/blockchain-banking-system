@@ -16,11 +16,13 @@
     "contracts:typecheck": "npm --prefix contracts run typecheck",
     "test": "npm --prefix contracts run test",
     "coverage": "npm --prefix contracts run coverage",
-    "deploy:local": "npm --prefix contracts run deploy:local",
+    "deploy:testnet:dry": "npm --prefix contracts run deploy:testnet:dry",
     "deploy:testnet": "npm --prefix contracts run deploy:testnet",
-    "verify:local": "npm --prefix contracts run verify:local",
     "verify:testnet": "npm --prefix contracts run verify:testnet",
-    "test:sepolia": "npm --prefix contracts run testnet:smoke",
+    "test:sepolia": "npm --prefix contracts run testnet:e2e:immediate",
+    "test:sepolia:mature": "npm --prefix contracts run testnet:e2e:mature",
+    "test:sepolia:auto-renew": "npm --prefix contracts run testnet:e2e:auto-renew",
+    "test:sepolia:status": "npm --prefix contracts run testnet:e2e:status",
     "configure:frontend": "npm --prefix contracts run configure:frontend"
   }
 }

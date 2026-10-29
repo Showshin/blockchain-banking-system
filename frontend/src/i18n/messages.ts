@@ -51,6 +51,7 @@ export const vi = {
     connectDescription: 'Gói và lãi suất được đọc trực tiếp từ contract đã cấu hình.',
     planName: (tenorDays: number) => {
       const names: Record<number, string> = {
+        1: 'Kỳ hạn 1 ngày',
         30: 'Linh hoạt 30',
         90: 'Cân bằng 90',
         180: 'Tích lũy 180',
@@ -279,6 +280,7 @@ export const vi = {
     noPendingInterest: 'Sổ này không có lãi chờ nhận.',
     topUpMatured: 'Sổ đã đáo hạn nên không thể nạp thêm.',
     interestNotReserved: 'Kho lãi chưa ghi nhận khoản lãi này.',
+    vaultReserveExceedsBalance: 'Kho lãi chưa đủ tiền để giữ khoản lãi này. Hãy nạp thêm kho lãi.',
     vaultProtected: 'Kho lãi đang giữ phần lãi đã hứa nên không thể rút phần đó.',
   },
 }
@@ -316,7 +318,7 @@ export const en: Messages = {
     connectWallet: 'Connect wallet',
     viewDeposits: 'View my deposits',
     days: (n: number) => n + ' days',
-    daysLeft: (n: number) => n + ' days left',
+    daysLeft: (n: number) => n + (n === 1 ? ' day left' : ' days left'),
     today: 'Today',
     apr: 'APR',
     processing: 'Processing…',
@@ -336,6 +338,7 @@ export const en: Messages = {
     connectDescription: 'Plans and rates are read directly from the configured contracts.',
     planName: (tenorDays: number) => {
       const names: Record<number, string> = {
+        1: '1-day term',
         30: 'Flexible 30',
         90: 'Balanced 90',
         180: 'Accumulate 180',
@@ -564,6 +567,8 @@ export const en: Messages = {
     noPendingInterest: 'This deposit has no pending interest.',
     topUpMatured: 'A matured deposit cannot be topped up.',
     interestNotReserved: 'The vault has not reserved this interest.',
+    vaultReserveExceedsBalance:
+      'The interest vault does not have enough funds to reserve this interest. Fund the vault first.',
     vaultProtected: 'The vault is holding promised interest and cannot release that part.',
   },
 }

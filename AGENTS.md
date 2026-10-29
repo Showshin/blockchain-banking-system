@@ -2,7 +2,7 @@
 
 ## What this repository is
 
-This is the final assignment for a blockchain programming course: an on-chain term-deposit system. The original brief is the course handout; distilled requirements and local working notes are kept in an untracked `docs/` folder and are not part of the submission. The current phase has a bilingual frontend, Solidity contracts with 100% line/statement coverage, a redeployed and source-verified public Sepolia deployment and a MetaMask contract adapter. All three contracts are source-verified on Sepolia Etherscan. The contracts implement C1 deferred interest (`claimInterest`), C2 reserved-interest accounting (`reservedInterest`), C3 partial early withdrawal (`earlyWithdrawPartial`, 11 tests) and C4 top-ups (`topUpDeposit`). The frontend exposes C1, C3 and C4 in the deposit card and action dialogs; C2 is admin/vault-only and has no dedicated screen. The new Sepolia deployment (`SavingCore 0x215b88d6…bc89`, blocks `12017324`–`12017340`) includes all four challenges, but live smoke testing covers only open and full early withdrawal; partial withdrawal, top-up, maturity, renewal, auto-renew and claim still need Sepolia ETH or maturity time. A real MetaMask walkthrough and the demo video remain open.
+This is the final assignment for a blockchain programming course: an on-chain term-deposit system. The original brief is the course handout; distilled requirements and local working notes are kept in an untracked `docs/` folder and are not part of the submission. The current phase has a bilingual frontend, Solidity contracts with 74 passing tests and 100% line/statement coverage, a source-verified public Sepolia deployment, a MetaMask contract adapter and a real-chain e2e harness. The repository is Sepolia-only: every deploy, verify and e2e command is locked to chain ID `11155111`, and there is no local, fork or parallel deployment path. The contracts implement C1 deferred interest (`claimInterest`), C2 reserved-interest accounting with the locked `CORE_ROLE` (`reservedInterest`, `setCoreOnce`), C3 partial early withdrawal (`earlyWithdrawPartial`, 11 tests) and C4 top-ups (`topUpDeposit`). The frontend exposes C1, C3 and C4 in the deposit card and action dialogs; C2 is admin/vault-only and has no dedicated screen. The current Sepolia deployment (`SavingCore 0xC5Dd267C…a302`, blocks `12018179`–`12018193`, five plans, vault `100,000 USDC`) has all four challenges and all three sources verified on Etherscan. The real-chain `immediate` e2e phase completed on 2026-10-29 (19 transactions); T1 was early-withdrawn manually afterwards, so the staged `mature` phase skips T1. The `mature` and `auto-renew` phases still need real chain time; a real MetaMask walkthrough and the demo video remain open.
 
 ## Default workflow
 
@@ -32,12 +32,13 @@ From the repository root, `npm run dev`, `npm run build` and `npm run lint` prox
 npm test
 npm run coverage
 npm run contracts:typecheck
-npm run deploy:local
-npm run verify:local
+npm run deploy:testnet:dry
+npm run verify:testnet
 npm run test:sepolia
+npm run test:sepolia:status
 ```
 
-The Sepolia path is locked to chain ID `11155111` and uses `deploy:testnet`, `verify:testnet` and `test:sepolia` with `TESTNET_RPC_URL` and `DEPLOYER_PRIVATE_KEY` supplied through the environment. `verify:testnet` only reads, but Hardhat still resolves the private-key variable, so set a dummy or real key for that command. Never put a deployer private key in source, `VITE_*`, or a committed file.
+The repository is Sepolia-only and locked to chain ID `11155111`: `deploy:testnet`, `verify:testnet`, `configure:frontend -- testnet` and the `test:sepolia*` phases all require `TESTNET_RPC_URL` and `DEPLOYER_PRIVATE_KEY` supplied through the environment. There is no local/fork deploy script or parallel deployment path; the in-process Hardhat network (`31337`) is used only by unit tests. `verify:testnet` only reads, but Hardhat still resolves the private-key variable, so set a dummy or real key for that command. Never put a deployer private key in source, `VITE_*`, or a committed file. Use `ALLOW_POST_E2E=1 npm run verify:testnet` after the e2e phases have opened deposits.
 
 ## Non-negotiable project rules
 
@@ -58,7 +59,7 @@ The Sepolia path is locked to chain ID `11155111` and uses `deploy:testnet`, `ve
 - `npm run lint` passes.
 - Contract tests and TypeScript check pass.
 - Plans and deposits work at desktop and mobile widths.
-- Open, withdraw-at-maturity, early-withdraw (full and partial), top-up, claim and renew flows have been exercised in a browser against the local deployment.
-- The README never claims C1/C2/C4 are on Sepolia until that deployment is redeployed, verified and smoke-tested.
+- Open, withdraw-at-maturity, early-withdraw (full and partial), top-up, claim and renew flows have been exercised in a browser against the Sepolia deployment.
+- The README never claims a flow was verified on Sepolia unless it has a real transaction hash or an explicit statement that chain time is still pending.
 - Language switching works, persists after reload and does not leave untranslated copy.
 - The README and tracked READMEs match the implementation; `docs/` is local working notes and is not part of the submission.

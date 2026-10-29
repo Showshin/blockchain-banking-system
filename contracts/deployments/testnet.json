@@ -1,31 +1,170 @@
 {
+  "schemaVersion": 2,
   "network": "testnet",
   "chainId": 11155111,
-  "deploymentBlock": 12017324,
-  "completedBlock": 12017340,
-  "deployedAt": "2026-10-29T05:11:24.000Z",
+  "deployedAt": "2026-10-29T08:05:24.857Z",
+  "deploymentBlock": 12018179,
+  "completedBlock": 12018193,
   "deployer": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
   "feeReceiver": "0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731",
   "explorerBaseUrl": "https://sepolia.etherscan.io",
   "contracts": {
-    "MockUSDC": "0x56790fee15a3E0A7921ccc7852a07b8C1E0C8289",
-    "VaultManager": "0x14BB3b3579f00087127d998d1362f8082F2cDD10",
-    "SavingCore": "0x215b88d623B6c66fFa1c4778503C2525ff03bc89"
+    "MockUSDC": "0x1fFa8aF3aF716E245A5501B086d1C01375F192fc",
+    "VaultManager": "0xA128175f2C1099Ecc3933876a3d0BF931816867C",
+    "SavingCore": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302"
   },
-  "transactions": {
-    "MockUSDC": "0xdcf00838937f96258eecb965d0076bccc62b0f72fb4ba78caf56d761a5e52237",
-    "VaultManager": "0x148e12d455b2568ee854305141754d0387fc6e0041ea45809194b61d92c1a41c",
-    "SavingCore": "0x7d5318a2070fdb1969353d6c071255be35fc15e0f9f9b06bdc4eb2adfbae3872",
-    "grantCoreRole": "0x017d042a5083ba6120d95309692cc641efb438eb83e1dd1ae7b857e643ce30d2",
-    "mint": "0x43118cc9b799f1ce1f26f1518ba06af37cf22f63ddb4353c9c667a1fa1ebd884",
-    "approveVault": "0xf4322888837fc48332287880645412a408d5519160cf46aa43e5b935e185188c",
-    "fundVault": "0x4fb9d8b7aa2a355560c1ca38bce1a33f990b2b0ab793274624fac54416efa8cb",
-    "createPlans": [
-      "0x7d78005cd351781aa72c80fab6367b62c3807b121914a2976f4c883266636f66",
-      "0x611fdd6f38fb9407d8cbe7b4edbbc116cb461990ad0a1140fdaa7b2cf56984ef",
-      "0x18a3c4280721cf069aea12040eca46ebac1a135340c67b4932ed00ac5058ef48",
-      "0xfaaa1fb65f11622e3e76dd4002b1ae9ba42ce6c7debff6004324d380dfbe6283"
-    ]
+  "transactions": [
+    {
+      "step": "MockUSDC",
+      "hash": "0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a",
+      "nonce": 72,
+      "to": null,
+      "gasLimit": "4011797",
+      "gasUsed": "3315682",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018180
+    },
+    {
+      "step": "VaultManager",
+      "hash": "0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a",
+      "nonce": 73,
+      "to": null,
+      "gasLimit": "9876354",
+      "gasUsed": "8164331",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018181
+    },
+    {
+      "step": "SavingCore",
+      "hash": "0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4",
+      "nonce": 74,
+      "to": null,
+      "gasLimit": "30250667",
+      "gasUsed": "25009236",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018182
+    },
+    {
+      "step": "setCoreOnce",
+      "hash": "0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960",
+      "nonce": 75,
+      "to": "0xA128175f2C1099Ecc3933876a3d0BF931816867C",
+      "gasLimit": "434162",
+      "gasUsed": "357794",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018183
+    },
+    {
+      "step": "mint",
+      "hash": "0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a",
+      "nonce": 76,
+      "to": "0x1fFa8aF3aF716E245A5501B086d1C01375F192fc",
+      "gasLimit": "289790",
+      "gasUsed": "238431",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018184
+    },
+    {
+      "step": "approveVault",
+      "hash": "0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85",
+      "nonce": 77,
+      "to": "0x1fFa8aF3aF716E245A5501B086d1C01375F192fc",
+      "gasLimit": "155630",
+      "gasUsed": "128598",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018185
+    },
+    {
+      "step": "fundVault",
+      "hash": "0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3",
+      "nonce": 78,
+      "to": "0xA128175f2C1099Ecc3933876a3d0BF931816867C",
+      "gasLimit": "181791",
+      "gasUsed": "150313",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018186
+    },
+    {
+      "step": "createPlan1",
+      "hash": "0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e",
+      "nonce": 79,
+      "to": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302",
+      "gasLimit": "574530",
+      "gasUsed": "473847",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018188
+    },
+    {
+      "step": "createPlan2",
+      "hash": "0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb",
+      "nonce": 80,
+      "to": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302",
+      "gasLimit": "574545",
+      "gasUsed": "473859",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018189
+    },
+    {
+      "step": "createPlan3",
+      "hash": "0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b",
+      "nonce": 81,
+      "to": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302",
+      "gasLimit": "574559",
+      "gasUsed": "473871",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018190
+    },
+    {
+      "step": "createPlan4",
+      "hash": "0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d",
+      "nonce": 82,
+      "to": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302",
+      "gasLimit": "574574",
+      "gasUsed": "473883",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018192
+    },
+    {
+      "step": "createPlan5",
+      "hash": "0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed",
+      "nonce": 83,
+      "to": "0xC5Dd267CfefC629E722110F8086c0DDc33a5a302",
+      "gasLimit": "574545",
+      "gasUsed": "473859",
+      "effectiveGasPrice": "12039",
+      "maxFeePerGas": "12054",
+      "maxPriorityFeePerGas": "12024",
+      "blockNumber": 12018193
+    }
+  ],
+  "gas": {
+    "maxBaseFeeWei": "1000000000",
+    "maxFeeWei": "2000000000",
+    "maxPriorityFeeWei": "100000000",
+    "worstCaseWei": "532049312172",
+    "actualCostWei": "478354062456"
   },
   "personalVariant": {
     "studentId": "22665321",
@@ -66,6 +205,14 @@
       "minDeposit": "2500000000",
       "maxDeposit": "500000000000",
       "penaltyBps": 500
+    },
+    {
+      "planId": 5,
+      "tenorDays": 1,
+      "aprBps": 500,
+      "minDeposit": "10000000",
+      "maxDeposit": "10000000000",
+      "penaltyBps": 100
     }
   ]
 }
