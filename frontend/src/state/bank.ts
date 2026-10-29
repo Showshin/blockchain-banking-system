@@ -20,6 +20,12 @@ export interface TopUpReceipt {
   interestAdded: number
 }
 
+export interface WalletIdentity {
+  name: string
+  icon: string
+  rdns: string
+}
+
 export interface BankContextValue {
   state: BankState
   isChainMode: boolean
@@ -31,7 +37,7 @@ export interface BankContextValue {
   renewDeposit: (depositId: string, newPlanId: string) => Promise<Deposit>
   topUpDeposit: (depositId: string, amount: number) => Promise<TopUpReceipt>
   claimInterest: (depositId: string) => Promise<ClaimReceipt>
-  connectWallet: (address: string) => void
+  connectWallet: (address: string, identity?: WalletIdentity) => void
   disconnectWallet: () => void
   refreshChain: () => Promise<void>
 }

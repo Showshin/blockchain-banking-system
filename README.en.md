@@ -4,7 +4,7 @@
 
 TÍCH is a term-deposit project built with smart contracts. Depositors put in MockUSDC, receive an NFT certificate (ERC-721) representing the deposit, and earn simple interest at the APR fixed when the deposit is opened. Depositors can add principal, settle at maturity, withdraw early and pay a penalty, claim deferred interest, or renew into a new term.
 
-The React + TypeScript interface connects to MetaMask and reads from and writes to the three contracts directly. After connecting, balances, saving plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
+The React + TypeScript interface connects to injected wallets through EIP-6963 (MetaMask is the default; Rabby, Coinbase Wallet, Brave and other injected wallets also work) and reads from and writes to the three contracts directly. After connecting, balances, saving plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
 
 ## Current status
 
@@ -13,7 +13,8 @@ The React + TypeScript interface connects to MetaMask and reads from and writes 
 | Source and tests | C1–C4 fully implemented. 74/74 tests pass, 100% line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
 | Public Sepolia | Deployed on 2026-10-29 with 5 plans, a `100,000 USDC` vault and 12 setup transactions. All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
 | Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. The `mature` and `auto-renew` phases are ready but have to wait for real chain time. |
-| Not yet completed | Run `mature` from 2026-10-30 08:21 UTC and `auto-renew` from 2026-11-02 08:21 UTC; a MetaMask walkthrough on the real Sepolia deployment and a 3–5 minute demo video. |
+| MetaMask walkthrough | On 2026-10-29 wallet `0xE197…f731` opened deposit #8, topped it up, made a partial early withdrawal and then a full early withdrawal directly in the interface; switching VI↔EN survives a reload. Details and hashes are in the walkthrough section below. |
+| Not yet completed | Run `mature` from 2026-10-30 08:21 UTC and `auto-renew` from 2026-11-02 08:21 UTC; settle and renew in the interface after maturity; claimable interest needs a short vault, so it is covered only by unit tests; a 3–5 minute demo video. |
 
 ## Personal parameters
 
@@ -76,7 +77,7 @@ Only public addresses and the chain ID live in `VITE_*` variables; the private k
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)).
+Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask (or another injected wallet enabled in the browser) and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). If the wallet does not have Sepolia yet, the interface offers to add it; if the wallet is on another network, open the wallet dialog and choose **Switch to Sepolia**.
 
 Add the token to show the balance next to the wallet address: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC is the token used for testing and its `mint` function is public, so a wallet with no funds can still receive tokens: call `mint` on Etherscan Write Contract with the amount in 6 decimals (1,000 USDC = `1000000000`). The wallet also needs Sepolia ETH to pay gas; faucet lists are in chainlist or at [sepoliafaucet.com](https://sepoliafaucet.com).
 
@@ -131,6 +132,18 @@ Result of the `immediate` phase on 2026-10-29: 19 real transactions with total g
 - `reservedInterest` always equals the total interest of active deposits plus deferred interest, and the vault balance always covers the promised amounts.
 
 T1 (certificate #2) was early-withdrawn on chain at `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), outside the `immediate` script; the `mature` phase will skip T1, settle T2–T4, renew T6 into the 90-day plan and let the new owner of T4 withdraw. The `auto-renew` phase will renew T5 after grace. These two phases cannot run before real chain time; `test:sepolia:status` prints the earliest timestamps.
+
+### MetaMask interface walkthrough
+
+On 2026-10-29 wallet `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` operated the interface directly on Sepolia:
+
+- Opened deposit #8, 1-day plan, `20 USDC`, APR `0.50%`: tx [`0xcc27ba...9b78`](https://sepolia.etherscan.io/tx/0xcc27ba3cc38e3c573b629181591e1b46e7cb76cd3d8e1bdfc9de22b1cd799b78).
+- Topped up `10 USDC`, new principal `30 USDC`: tx [`0xddf627...9378`](https://sepolia.etherscan.io/tx/0xddf627314360b3192a4af405310fd417653a1953b276d41ae147fa27254a9378).
+- Partial early withdrawal of `10 USDC`, penalty `0.10 USDC`, `20 USDC` remaining: tx [`0x3d4e93...e4a`](https://sepolia.etherscan.io/tx/0x3d4e93ed7453722f4247bc5e55e733cb1c221ad4b7b30b0bd2569354fed86e4a).
+- Full early withdrawal of `20 USDC`, penalty `0.20 USDC`, `19.80 USDC` received: tx [`0x37ec17...4a28`](https://sepolia.etherscan.io/tx/0x37ec175dd807d21e0e197085cef897128ce76895cf11af28ceae1908ae6a4a28).
+- Switched VI↔EN, which survives a reload; checked the empty state, the loading state and the below-minimum amount error in both languages.
+
+Settle, claimable interest, renew and auto-renew could not run in the interface: the active deposits mature `2026-10-30 08:20–09:31 UTC`, and `claimInterest` only appears when the vault is short while the current deployment is fully funded.
 
 ## Architecture
 

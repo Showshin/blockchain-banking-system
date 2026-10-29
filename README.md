@@ -4,7 +4,7 @@
 
 TÍCH là một dự án sổ tiết kiệm có kỳ hạn được triển khai bằng smart contract. Người gửi nạp MockUSDC, nhận chứng chỉ NFT (ERC-721) đại diện cho khoản tiền gửi và hưởng lãi đơn theo APR được cố định tại thời điểm mở sổ. Người gửi có thể nạp thêm gốc, tất toán đúng hạn, rút trước hạn và chịu phạt, nhận phần lãi còn chờ hoặc tái gửi sang kỳ hạn mới.
 
-Giao diện React + TypeScript kết nối MetaMask và đọc/ghi trực tiếp lên ba contract. Sau khi kết nối, số dư, gói tiết kiệm và sổ đều được đọc từ chain; trong thời gian chờ RPC, giao diện hiển thị trạng thái đang tải.
+Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask là mặc định; Rabby, Coinbase Wallet, Brave và các ví injected khác cũng dùng được) và đọc/ghi trực tiếp lên ba contract. Sau khi kết nối, số dư, gói tiết kiệm và sổ đều được đọc từ chain; trong thời gian chờ RPC, giao diện hiển thị trạng thái đang tải.
 
 ## Trạng thái hiện tại
 
@@ -13,7 +13,8 @@ Giao diện React + TypeScript kết nối MetaMask và đọc/ghi trực tiếp
 | Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 74/74 kiểm thử đạt, độ bao phủ 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
 | Sepolia công khai | Triển khai ngày 2026-10-29 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập. Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
 | Kiểm thử E2E trên Sepolia | Giai đoạn `immediate` hoàn tất ngày 2026-10-29: mở sổ, nạp thêm gốc, rút sớm một phần, kiểm tra pause/role/reserve, rút sớm toàn bộ, chuyển NFT và kiểm tra invariant. Hai giai đoạn `mature` và `auto-renew` đã sẵn sàng nhưng phải chờ thời gian thực của chain. |
-| Chưa hoàn tất | Chạy `mature` từ 2026-10-30 08:21 UTC và `auto-renew` từ 2026-11-02 08:21 UTC; walkthrough MetaMask trên bản Sepolia thật và video demo 3–5 phút. |
+| Walkthrough MetaMask | Ngày 2026-10-29, ví `0xE197…f731` mở sổ #8, nạp thêm, rút sớm một phần rồi rút sớm toàn bộ trực tiếp trên giao diện; đổi ngôn ngữ VI↔EN giữ nguyên sau khi tải lại. Chi tiết và hash ở mục walkthrough bên dưới. |
+| Chưa hoàn tất | Chạy `mature` từ 2026-10-30 08:21 UTC và `auto-renew` từ 2026-11-02 08:21 UTC; tất toán và tái gửi trên giao diện sau đáo hạn; nhận lãi chờ cần vault thiếu tiền nên chỉ kiểm thử ở bộ unit test; video demo 3–5 phút. |
 
 ## Thông số cá nhân
 
@@ -76,7 +77,7 @@ Chỉ địa chỉ công khai và chain ID nằm trong biến `VITE_*`; private 
 npm run dev
 ```
 
-Mở `http://127.0.0.1:5173/`, chọn **Kết nối ví**, chọn MetaMask và chuyển sang **Sepolia** (chain ID `11155111`, danh sách RPC có tại [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)).
+Mở `http://127.0.0.1:5173/`, chọn **Kết nối ví**, chọn MetaMask (hoặc ví injected khác đang bật trong trình duyệt) và chuyển sang **Sepolia** (chain ID `11155111`, danh sách RPC có tại [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). Khi ví chưa có Sepolia, giao diện tự đề nghị thêm mạng; nếu ví đang ở mạng khác, mở hộp thoại ví và bấm **Chuyển sang Sepolia**.
 
 Thêm token để hiển thị số dư cạnh địa chỉ ví: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC là token dùng cho kiểm thử và hàm `mint` mở công khai, nên ví chưa có tiền vẫn có thể nhận token: gọi `mint` trên Etherscan Write Contract với số lượng theo 6 decimals (1.000 USDC = `1000000000`). Ví cũng cần Sepolia ETH để trả phí gas; danh sách faucet có trong chainlist hoặc tại [sepoliafaucet.com](https://sepoliafaucet.com).
 
@@ -131,6 +132,18 @@ Kết quả giai đoạn `immediate` ngày 2026-10-29: 19 giao dịch thật v�
 - `reservedInterest` luôn bằng tổng lãi của các sổ đang hoạt động cộng với lãi chờ, và số dư vault luôn đủ để bảo đảm các khoản đã hứa.
 
 Sổ T1 (chứng chỉ #2) đã được rút sớm trên chain lúc `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), ngoài kịch bản `immediate`; giai đoạn `mature` sẽ bỏ qua T1, tất toán T2–T4, tái gửi T6 sang gói 90 ngày và cho chủ mới của T4 rút. Giai đoạn `auto-renew` sẽ gia hạn T5 sau grace. Hai giai đoạn này không thể chạy sớm hơn thời gian thực của chain; `test:sepolia:status` in rõ mốc thời gian sớm nhất.
+
+### Walkthrough giao diện với MetaMask
+
+Ngày 2026-10-29, ví `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` thao tác trực tiếp trên giao diện, mạng Sepolia:
+
+- Mở sổ #8, gói 1 ngày, `20 USDC`, APR `0,50%`: tx [`0xcc27ba...9b78`](https://sepolia.etherscan.io/tx/0xcc27ba3cc38e3c573b629181591e1b46e7cb76cd3d8e1bdfc9de22b1cd799b78).
+- Nạp thêm `10 USDC`, gốc mới `30 USDC`: tx [`0xddf627...9378`](https://sepolia.etherscan.io/tx/0xddf627314360b3192a4af405310fd417653a1953b276d41ae147fa27254a9378).
+- Rút sớm một phần `10 USDC`, phạt `0,10 USDC`, còn `20 USDC`: tx [`0x3d4e93...e4a`](https://sepolia.etherscan.io/tx/0x3d4e93ed7453722f4247bc5e55e733cb1c221ad4b7b30b0bd2569354fed86e4a).
+- Rút sớm toàn bộ `20 USDC`, phạt `0,20 USDC`, thực nhận `19,80 USDC`: tx [`0x37ec17...4a28`](https://sepolia.etherscan.io/tx/0x37ec175dd807d21e0e197085cef897128ce76895cf11af28ceae1908ae6a4a28).
+- Đổi ngôn ngữ VI↔EN, giữ nguyên sau khi tải lại; kiểm tra trạng thái rỗng, trạng thái đang tải và lỗi số tiền dưới mức tối thiểu ở cả hai ngôn ngữ.
+
+Tất toán, nhận lãi chờ, tái gửi và auto-renew chưa chạy được trên giao diện: các sổ đang hoạt động đáo hạn `2026-10-30 08:20–09:31 UTC`, còn `claimInterest` chỉ xuất hiện khi vault thiếu tiền, trong khi bản triển khai hiện đang nạp đủ.
 
 ## Kiến trúc
 

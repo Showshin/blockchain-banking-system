@@ -10,6 +10,7 @@ import { messages } from '../i18n/messages'
 import type { Deposit, DepositStatus, SavingPlan } from '../types'
 import { MockUSDCAbi, SavingCoreAbi } from './abis'
 import { contractConfig, type ContractConfig } from './config'
+import { providerFor } from './wallet'
 
 const ACTIVE = 1n
 const WITHDRAWN = 2n
@@ -70,8 +71,7 @@ function requireConfig(): ContractConfig {
 }
 
 function requireEthereum(): NonNullable<Window['ethereum']> {
-  if (!window.ethereum) throw new Error('MetaMask is not available.')
-  return window.ethereum
+  return providerFor()
 }
 
 async function readContracts() {

@@ -9,15 +9,22 @@ import {
   type BankContextValue,
   type ClaimReceipt,
   type TopUpReceipt,
+  type WalletIdentity,
   type WithdrawReceipt,
 } from './bank'
+import {
+  clearWallet,
+  getActiveWallet,
+  restoreInjectedWallet,
+  subscribeWalletEvents,
+} from '../contracts/wallet'
 
 
 function emptyBankState(): BankState {
   return {
     plans: [],
     deposits: [],
-    wallet: { connected: false, mode: null, address: null, balance: 0 },
+    wallet: { connected: false, mode: null, address: null, balance: 0, name: null, icon: null },
     vault: { balance: 0 },
     nextCertificateNo: 1,
   }
@@ -262,43 +269,64 @@ export function BankProvider({ children }: { children: ReactNode }) {
     [address, refreshChain, state.deposits, state.wallet.connected, t],
   )
 
-  const connectWallet = useCallback((nextAddress: string) => {
+  const connectWallet = useCallback((nextAddress: string, identity?: WalletIdentity) => {
     setChainError(null)
     setState({
       ...emptyBankState(),
-      wallet: { connected: true, mode: 'metamask', address: nextAddress, balance: 0 },
+      wallet: {
+        connected: true,
+        mode: 'injected',
+        address: nextAddress,
+        balance: 0,
+        name: identity?.name ?? null,
+        icon: identity?.icon ?? null,
+      },
     })
   }, [])
 
   const disconnectWallet = useCallback(() => {
+    clearWallet()
     setChainError(null)
     setState(emptyBankState())
   }, [])
 
   useEffect(() => {
-    const ethereum = window.ethereum
-    if (!ethereum?.on || !ethereum.removeListener || state.wallet.mode !== 'metamask') return
-
-    const onAccountsChanged = (...args: unknown[]) => {
-      const accounts = args[0]
-      const nextAddress = Array.isArray(accounts) ? accounts[0] : undefined
-      if (typeof nextAddress === 'string' && nextAddress) {
-        connectWallet(nextAddress)
-      } else {
-        disconnectWallet()
-      }
-    }
-    const onChainChanged = () => {
-      void refreshChain()
-    }
-
-    ethereum.on('accountsChanged', onAccountsChanged)
-    ethereum.on('chainChanged', onChainChanged)
+    if (!hasContractConfig || state.wallet.connected) return
+    let cancelled = false
+    void (async () => {
+      const restored = await restoreInjectedWallet()
+      if (!restored || cancelled) return
+      connectWallet(restored.address, {
+        name: restored.wallet.name,
+        icon: restored.wallet.icon,
+        rdns: restored.wallet.rdns,
+      })
+    })()
     return () => {
-      ethereum.removeListener?.('accountsChanged', onAccountsChanged)
-      ethereum.removeListener?.('chainChanged', onChainChanged)
+      cancelled = true
     }
-  }, [connectWallet, disconnectWallet, refreshChain, state.wallet.mode])
+  }, [connectWallet, state.wallet.connected])
+
+  useEffect(() => {
+    if (state.wallet.mode !== 'injected') return
+    return subscribeWalletEvents({
+      onAccountsChanged: (nextAddress) => {
+        if (!nextAddress) {
+          disconnectWallet()
+          return
+        }
+        const wallet = getActiveWallet()
+        connectWallet(nextAddress, {
+          name: wallet?.name ?? state.wallet.name ?? '',
+          icon: wallet?.icon ?? state.wallet.icon ?? '',
+          rdns: wallet?.rdns ?? '',
+        })
+      },
+      onChainChanged: () => {
+        void refreshChain()
+      },
+    })
+  }, [connectWallet, disconnectWallet, refreshChain, state.wallet.icon, state.wallet.mode, state.wallet.name])
 
   const value = useMemo<BankContextValue>(
     () => ({

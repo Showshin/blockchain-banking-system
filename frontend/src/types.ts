@@ -5,7 +5,7 @@ export type DepositStatus =
   | 'auto-renewed'
   | 'principal-withdrawn'
 
-export type WalletMode = 'metamask'
+export type WalletMode = 'injected'
 
 export interface LocalizedText {
   vi: string
@@ -47,6 +47,8 @@ export interface WalletState {
   mode: WalletMode | null
   address: string | null
   balance: number
+  name: string | null
+  icon: string | null
 }
 
 export interface VaultState {

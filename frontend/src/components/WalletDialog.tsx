@@ -1,51 +1,101 @@
-import { ArrowSquareOut, ShieldCheck } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { ArrowSquareOut, ShieldCheck, Wallet } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState } from 'react'
 import { contractConfig, contractConfigError } from '../contracts/config'
+import {
+  connectInjectedWallet,
+  discoverWallets,
+  ensureTargetNetwork,
+  type WalletInfo,
+} from '../contracts/wallet'
 import { useI18n } from '../i18n/lang'
 import { formatAddress, formatUsdc } from '../lib/format'
 import { useBank } from '../state/bank'
 import { useToast } from '../state/toast'
 import { Modal, ModalClose } from './Modal'
 
+function errorCode(cause: unknown): number | undefined {
+  if (!cause || typeof cause !== 'object') return undefined
+  const record = cause as { code?: unknown; data?: { originalError?: { code?: unknown } } }
+  const code = record.code ?? record.data?.originalError?.code
+  return typeof code === 'number' ? code : undefined
+}
+
 export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { state, connectWallet, disconnectWallet, chainLoading, chainError } = useBank()
+  const { state, connectWallet, disconnectWallet, refreshChain, chainLoading, chainError } = useBank()
   const { toast } = useToast()
   const { t } = useI18n()
   const copy = t.walletDialog
-  const [busy, setBusy] = useState<boolean>(false)
+  const [wallets, setWallets] = useState<WalletInfo[]>([])
+  const [discovering, setDiscovering] = useState<boolean>(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const connectMetaMask = async () => {
+  const scan = useCallback(async () => {
+    setDiscovering(true)
     setError(null)
-    setBusy(true)
     try {
-      if (!window.ethereum) {
-        throw new Error(copy.errorNoMetaMask)
+      setWallets(await discoverWallets())
+    } finally {
+      setDiscovering(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open || state.wallet.connected) return
+    const task = window.setTimeout(() => void scan(), 0)
+    return () => window.clearTimeout(task)
+  }, [open, scan, state.wallet.connected])
+
+  const describeError = (cause: unknown): string => {
+    if (cause instanceof Error) {
+      if (cause.message === 'NO_WALLET') return copy.errorNoWallet
+      if (cause.message === 'NO_ACCOUNT') return copy.errorNoAccount
+      if (cause.message === 'CONFIG') return copy.errorContractConfig
+      if (cause.message.startsWith('WRONG_NETWORK:')) {
+        return copy.errorWrongNetwork(cause.message.slice('WRONG_NETWORK:'.length))
       }
-      if (contractConfigError || !contractConfig) throw new Error(copy.errorContractConfig)
-      const { assertConfiguredNetwork } = await import('../contracts/adapter')
-      await assertConfiguredNetwork()
-      const accounts = (await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      })) as string[]
-      const address = accounts?.[0]
-      if (!address) throw new Error(copy.errorNoAccount)
-      connectWallet(address)
-      toast({ title: copy.toastMetaTitle, message: copy.toastMetaMessage, tone: 'success' })
+    }
+    if (errorCode(cause) === 4001) return copy.errorRejected
+    const message = cause instanceof Error ? cause.message : ''
+    if (/rejected|denied/i.test(message)) return copy.errorRejected
+    return copy.errorConnect
+  }
+
+  const connect = async (wallet: WalletInfo) => {
+    setError(null)
+    setBusyId(wallet.uuid)
+    try {
+      if (contractConfigError || !contractConfig) throw new Error('CONFIG')
+      const address = await connectInjectedWallet(wallet)
+      connectWallet(address, { name: wallet.name, icon: wallet.icon, rdns: wallet.rdns })
+      toast({
+        title: copy.toastWalletTitle(wallet.name),
+        message: copy.toastWalletMessage,
+        tone: 'success',
+      })
       onClose()
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : copy.errorConnect
-      setError(
-        message.startsWith('WRONG_NETWORK:')
-          ? copy.errorWrongNetwork(message.slice('WRONG_NETWORK:'.length))
-          : [copy.errorNoMetaMask, copy.errorNoAccount, copy.errorContractConfig].includes(message)
-            ? message
-            : copy.errorConnect,
-      )
+      setError(describeError(cause))
     } finally {
-      setBusy(false)
+      setBusyId(null)
     }
   }
+
+  const switchChain = async () => {
+    setError(null)
+    setBusyId('network')
+    try {
+      await ensureTargetNetwork()
+      await refreshChain()
+    } catch (cause) {
+      setError(describeError(cause))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const connectedIcon = state.wallet.icon || ''
+  const connectedName = state.wallet.name || copy.unknownWallet
 
   return (
     <Modal
@@ -53,7 +103,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
       onClose={onClose}
       label={copy.title}
       size="sm"
-      closeDisabled={busy}
+      closeDisabled={busyId !== null}
     >
       <div className="p-6 sm:p-7">
         <div className="flex items-start justify-between gap-4">
@@ -61,7 +111,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
             <h2 className="text-2xl font-medium tracking-[-0.04em]">{copy.title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted">{copy.description}</p>
           </div>
-          <ModalClose onClose={onClose} disabled={busy} />
+          <ModalClose onClose={onClose} disabled={busyId !== null} />
         </div>
 
         {state.wallet.connected ? (
@@ -69,12 +119,17 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
             <div className="rounded-[18px] border border-line bg-paper/70 p-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <img src="/metamask.svg" alt="MetaMask" className="h-9 w-9 object-contain shrink-0" />
+                  {connectedIcon ? (
+                    <img src={connectedIcon} alt="" className="h-9 w-9 shrink-0 rounded-lg object-contain" />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-paper">
+                      <Wallet size={18} weight="light" className="text-muted" />
+                    </span>
+                  )}
                   <div>
                     <p className="text-sm font-medium">{formatAddress(state.wallet.address)}</p>
                     <p className="mt-0.5 text-xs text-muted">
-                      {copy.metamask} · USDC{' '}
-                      {formatUsdc(state.wallet.balance)}
+                      {connectedName} · USDC {formatUsdc(state.wallet.balance)}
                     </p>
                   </div>
                 </div>
@@ -85,6 +140,16 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
               <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">
                 {chainLoading ? copy.chainLoading : chainError}
               </p>
+            ) : null}
+            {chainError ? (
+              <button
+                type="button"
+                className="btn btn-secondary mt-3 w-full"
+                onClick={switchChain}
+                disabled={busyId !== null}
+              >
+                {busyId === 'network' ? copy.walletWaiting : copy.switchNetwork}
+              </button>
             ) : null}
             <p className="mt-4 flex gap-2 text-xs leading-relaxed text-muted">
               <ShieldCheck size={16} weight="light" className="mt-0.5 shrink-0 text-accent" />
@@ -103,21 +168,47 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
           </div>
         ) : (
           <div className="mt-7 space-y-3">
-            <button
-              type="button"
-              className="wallet-option"
-              onClick={connectMetaMask}
-              disabled={busy}
-            >
-              <img src="/metamask.svg" alt="MetaMask" className="h-9 w-9 object-contain shrink-0" />
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block text-base font-medium">{copy.metamask}</span>
-                {busy ? (
-                  <span className="mt-0.5 block text-xs text-muted">{copy.metamaskWaiting}</span>
-                ) : null}
-              </span>
-              <ArrowSquareOut size={17} weight="light" className="text-muted" />
-            </button>
+            {discovering ? (
+              <p className="rounded-xl border border-line px-3.5 py-3 text-xs text-muted" role="status">
+                {copy.discovering}
+              </p>
+            ) : null}
+
+            {wallets.map((wallet) => (
+              <button
+                key={wallet.uuid}
+                type="button"
+                className="wallet-option"
+                onClick={() => void connect(wallet)}
+                disabled={busyId !== null}
+              >
+                {wallet.icon ? (
+                  <img src={wallet.icon} alt="" className="h-9 w-9 shrink-0 rounded-lg object-contain" />
+                ) : (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-paper">
+                    <Wallet size={18} weight="light" className="text-muted" />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block text-base font-medium">{wallet.name}</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    {busyId === wallet.uuid
+                      ? copy.walletWaiting
+                      : copy.walletDescription(contractConfig?.chainId ?? 11155111)}
+                  </span>
+                </span>
+                <ArrowSquareOut size={17} weight="light" className="text-muted" />
+              </button>
+            ))}
+
+            {!discovering && wallets.length === 0 ? (
+              <div className="rounded-xl border border-line px-3.5 py-3 text-xs leading-relaxed text-muted">
+                {copy.errorNoWallet}
+                <button type="button" className="ml-2 underline" onClick={() => void scan()}>
+                  {copy.retry}
+                </button>
+              </div>
+            ) : null}
 
             {error ? (
               <p role="alert" className="alert-danger rounded-xl border px-3.5 py-3 text-xs leading-relaxed">
