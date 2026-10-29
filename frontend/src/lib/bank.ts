@@ -11,7 +11,7 @@ function fromUnits(value: bigint): number {
   return Number(value) / USDC_UNITS
 }
 
-/** Mirrors the integer arithmetic required by the assignment. */
+/** Mirrors the integer arithmetic used by the contracts. */
 export function interestFor(principal: number, aprBps: number, tenorDays: number): number {
   const principalUnits = toUnits(principal)
   const wholeDays = Math.max(0, Math.floor(tenorDays))

@@ -1,6 +1,6 @@
 # Contracts — TÍCH
 
-Ba contract bắt buộc của đề, cộng một interface định kiểu:
+Ba contract chính, cộng một interface định kiểu:
 
 | File | Vai trò |
 | --- | --- |
@@ -24,7 +24,7 @@ npm run export:abis
 
 `export:abis` đọc artifact đã compile và ghi `frontend/src/contracts/abis.ts`; không sửa ABI bằng tay.
 
-## Personal variant
+## Tham số cố định
 
 Nguồn duy nhất ở `config/personal.ts`:
 
@@ -55,7 +55,7 @@ npm run configure:frontend -- testnet
 Script deploy:
 
 1. Deploy `MockUSDC` và `VaultManager`.
-2. Deploy `SavingCore` với grace period của personal variant.
+2. Deploy `SavingCore` với grace period của bộ tham số cố định.
 3. Gọi `vault.setCoreOnce(core)` để cấp `CORE_ROLE` và khóa admin của role.
 4. Mint 150.000 MockUSDC cho deployer, approve và nạp 100.000 vào vault.
 5. Tạo năm gói 30/90/180/365/1 ngày.
@@ -126,7 +126,7 @@ Các nhóm đã phủ:
 
 ## Quản trị
 
-Các hàm admin có trên contract; không có màn hình admin trong frontend vì đề chỉ yêu cầu luồng người dùng.
+Các hàm admin có trên contract; frontend chỉ tập trung vào luồng người dùng nên không có màn hình admin.
 
 | Hàm | Role | Việc |
 | --- | --- | --- |

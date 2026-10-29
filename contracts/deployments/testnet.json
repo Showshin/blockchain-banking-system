@@ -209,7 +209,7 @@
     {
       "planId": 5,
       "tenorDays": 1,
-      "aprBps": 500,
+      "aprBps": 50,
       "minDeposit": "10000000",
       "maxDeposit": "10000000000",
       "penaltyBps": 100

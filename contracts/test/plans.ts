@@ -13,7 +13,7 @@ import { DEPLOYMENT_PLANS, EXPECTED_PLAN_COUNT, NEXT_PLAN_ID } from "../config/p
 const USDC = (whole: number) => BigInt(whole) * 1_000_000n;
 
 describe("deployment plans", function () {
-  it("locks the personal variant for student 22665321", function () {
+  it("locks the fixed deployment parameters", function () {
     expect(A).to.equal(1);
     expect(B).to.equal(2);
     expect(GRACE_PERIOD_DAYS).to.equal(3n);
@@ -58,7 +58,7 @@ describe("deployment plans", function () {
     });
     expect(DEPLOYMENT_PLANS[4]).to.deep.equal({
       tenorDays: 1,
-      aprBps: 500,
+      aprBps: 50,
       minDeposit: USDC(10),
       maxDeposit: USDC(10_000),
       penaltyBps: 100,

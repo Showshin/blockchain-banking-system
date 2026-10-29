@@ -5,7 +5,7 @@
   "engines": {
     "node": ">=24.22.1"
   },
-  "description": "TÍCH — on-chain term deposits for the Online Banking System assignment",
+  "description": "TÍCH — on-chain term-deposit system",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
