@@ -2,9 +2,9 @@
 
 [![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-111827?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-d1d5db?style=flat-square)](README.en.md)
 
-TÍCH là một dự án sổ tiết kiệm có kỳ hạn được triển khai bằng smart contract. Người gửi nạp MockUSDC, nhận chứng chỉ NFT (ERC-721) đại diện cho khoản tiền gửi và hưởng lãi đơn theo APR được cố định tại thời điểm mở sổ. Người gửi có thể nạp thêm gốc, tất toán đúng hạn, rút trước hạn và chịu phạt, nhận phần lãi còn chờ hoặc tái gửi sang kỳ hạn mới.
+TÍCH là hệ thống sổ tiết kiệm có kỳ hạn on-chain: người gửi nạp MockUSDC, nhận chứng chỉ NFT (ERC-721) và hưởng lãi đơn theo APR cố định tại thời điểm mở sổ. Người gửi có thể nạp thêm gốc (C4), tất toán đúng hạn, rút trước hạn một phần (C3) hoặc toàn bộ, nhận lãi chờ khi vault thiếu tiền (C1) và tái gửi sang kỳ hạn mới.
 
-Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask là mặc định; Rabby, Coinbase Wallet, Brave và các ví injected khác cũng dùng được) và đọc/ghi trực tiếp lên ba contract. Sau khi kết nối, số dư, gói tiết kiệm và sổ đều được đọc từ chain; trong thời gian chờ RPC, giao diện hiển thị trạng thái đang tải.
+Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask mặc định; Rabby, Coinbase Wallet, Brave và các ví injected khác cũng dùng được), đọc/ghi trực tiếp lên ba contract trên Sepolia. Sau khi kết nối, số dư, gói và sổ đều được đọc từ chain; trong thời gian chờ RPC hiển thị trạng thái đang tải.
 
 ## Trạng thái hiện tại
 
@@ -28,6 +28,34 @@ MSSV **22665321** lấy hai chữ số cuối: `A = 1` (chữ số hàng đơn v
 | Kỳ hạn mặc định | `B` chẵn → 90 ngày | 90 ngày | Áp dụng cho gói mặc định |
 
 Nguồn duy nhất là [contracts/config/personal.ts](contracts/config/personal.ts). Kiểm thử, script deploy và manifest đều đọc từ đây. Grace period là tham số constructor `immutable` nên không thể sửa sau khi deploy; muốn đổi MSSV phải triển khai bộ contract mới.
+
+## Gói tiết kiệm
+
+Mỗi gói (saving plan) là một sản phẩm do admin tạo, tương đương lời chào "gửi 90 ngày, APR 2,25%". Các trường lưu trong struct `SavingPlan`:
+
+| Trường | Ý nghĩa |
+| --- | --- |
+| `tenorDays` | Thời gian gửi (7, 30, 90, 180, 365 ngày…) |
+| `aprBps` | Lãi suất năm, tính theo basis points (225 = 2,25%/năm) |
+| `minDeposit` / `maxDeposit` | Số tiền gửi tối thiểu / tối đa; `0` nghĩa là không giới hạn |
+| `earlyWithdrawPenaltyBps` | Phạt rút sớm (400 = 4%), tính trên phần gốc bị rút |
+| `enabled` | Admin có thể tắt gói để chặn mở sổ mới |
+
+Khi mở sổ, `aprBps` và `earlyWithdrawPenaltyBps` được snapshot vào chứng chỉ NFT. Việc sửa gói về sau chỉ ảnh hưởng đến sổ mở mới, không thay đổi sổ đã tồn tại.
+
+## Hàm admin
+
+Admin quản lý hệ thống qua `VaultManager` và `SavingCore`; không thể sửa sổ đã mở.
+
+| Hàm | Thuộc contract | Chức năng |
+| --- | --- | --- |
+| `createPlan(tenorDays, aprBps, minDeposit, maxDeposit, penaltyBps)` | `SavingCore` | Tạo gói tiết kiệm mới |
+| `updatePlan(planId, newAprBps)` | `SavingCore` | Đổi APR; chỉ ảnh hưởng sổ mở sau đó |
+| `setPlanEnabled(planId, enabled)` | `SavingCore` | Bật/tắt gói; chặn mở sổ mới khi tắt |
+| `fundVault(amount)` | `VaultManager` | Nạp token vào vault để trả lãi |
+| `withdrawVault(amount)` | `VaultManager` | Rút phần chưa hứa (`balance − reservedInterest`) |
+| `setFeeReceiver(address)` | `VaultManager` | Đổi địa chỉ nhận tiền phạt rút sớm |
+| `pause()` / `unpause()` | `VaultManager` | Dừng/khôi phục mọi giao dịch rút, mở sổ và nạp thêm |
 
 ## Công nghệ
 
@@ -168,6 +196,30 @@ penalty     = amount × penaltyBpsAtOpen / 10_000
 ```
 
 Năm trạng thái: `Active`, `Withdrawn`, `ManualRenewed`, `AutoRenewed`, `PrincipalWithdrawn`. Ba cách kết thúc sổ là tất toán, rút sớm toàn bộ và tái gửi thủ công; cả ba đều kiểm tra `status == Active` và `ownerOf(depositId) == msg.sender`. `topUpDeposit` chỉ áp dụng cho sổ `Active` trước đáo hạn. `claimInterest` chỉ áp dụng cho sổ `PrincipalWithdrawn`.
+
+### Sự kiện
+
+Năm sự kiện bắt buộc theo đề bài, cùng các sự kiện bổ trợ cho C1–C4:
+
+| Sự kiện | Contract | Ý nghĩa |
+| --- | --- | --- |
+| `PlanCreated(planId, tenorDays, aprBps)` | `SavingCore` | Tạo gói mới |
+| `PlanUpdated(planId, newAprBps)` | `SavingCore` | Đổi APR gói; chỉ ảnh hưởng sổ sau |
+| `PlanStatusChanged(planId, enabled)` | `SavingCore` | Bật/tắt gói |
+| `DepositOpened(depositId, owner, planId, principal, maturityAt, aprBpsAtOpen)` | `SavingCore` | Mở sổ, mint NFT |
+| `Withdrawn(depositId, owner, principal, interest, isEarly)` | `SavingCore` | Tất toán hoặc rút sớm toàn bộ |
+| `Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId)` | `SavingCore` | Tái gửi thủ công hoặc auto-renew |
+| `PartialEarlyWithdrawn(depositId, owner, amount, penalty, remainingPrincipal)` | `SavingCore` | Rút sớm một phần (C3) |
+| `DepositToppedUp(depositId, owner, amount, newPrincipal, interestAdded)` | `SavingCore` | Nạp thêm gốc (C4) |
+| `InterestDeferred(depositId, owner, amount)` | `SavingCore` | Ghi nợ lãi khi vault thiếu tiền (C1) |
+| `InterestClaimed(depositId, owner, amount)` | `SavingCore` | Nhận lãi chờ (C1) |
+| `VaultFunded(funder, amount)` | `VaultManager` | Nạp tiền vào vault |
+| `VaultWithdrawn(recipient, amount)` | `VaultManager` | Rút phần chưa hứa |
+| `FeeReceiverUpdated(previousReceiver, newReceiver)` | `VaultManager` | Đổi fee receiver |
+| `InterestReserved(amount, totalReserved)` | `VaultManager` | Reserve lãi khi mở sổ/nạp thêm (C2) |
+| `InterestReleased(amount, totalReserved)` | `VaultManager` | Giải trừ khi rút sớm (C2) |
+| `InterestPaid(recipient, amount)` | `VaultManager` | Trả lãi cho người gửi |
+| `CoreRoleLocked(core)` | `VaultManager` | Khóa `CORE_ROLE` sau `setCoreOnce` (C2) |
 
 ## Design Answers
 
@@ -313,7 +365,7 @@ npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 2592
 | `VaultManager` | [`0xA128175f2C1099Ecc3933876a3d0BF931816867C`](https://sepolia.etherscan.io/address/0xA128175f2C1099Ecc3933876a3d0BF931816867C#code) |
 | `SavingCore` | [`0xC5Dd267CfefC629E722110F8086c0DDc33a5a302`](https://sepolia.etherscan.io/address/0xC5Dd267CfefC629E722110F8086c0DDc33a5a302#code) |
 
-Deployer kiêm fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contract được deploy ở block `12018179`; 12 giao dịch thiết lập kết thúc ở block `12018193`, tổng gas thực tế `478.354.062.456` wei (khoảng `0,000478` ETH). Manifest đầy đủ ở [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
+Deployer kiêm fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contract deploy ở block `12018179`; 12 giao dịch thiết lập kết thúc ở block `12018193`, tổng gas `478.354.062.456` wei (≈ `0,000478` ETH). Manifest đầy đủ ở [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
 
 Năm gói trên chain:
 
@@ -325,30 +377,35 @@ Năm gói trên chain:
 | 4 | 365 ngày | 4,00% | 2.500 USDC | 500.000 USDC | 5,00% |
 | 5 | 1 ngày | 0,50% | 10 USDC | 10.000 USDC | 1,00% |
 
-Giao dịch deploy và thiết lập:
+Giao dịch deploy và thiết lập (block `12018179`–`12018193`, tổng gas `478.354.062.456` wei ≈ `0,000478` ETH):
 
 - Deploy `MockUSDC`: [`0x68b959...c460a`](https://sepolia.etherscan.io/tx/0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a)
 - Deploy `VaultManager`: [`0x23176a...4fd8a`](https://sepolia.etherscan.io/tx/0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a)
 - Deploy `SavingCore`: [`0xb4612e...788c4`](https://sepolia.etherscan.io/tx/0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4)
 - `setCoreOnce`: [`0xdf3f3c...14960`](https://sepolia.etherscan.io/tx/0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960)
-- Mint `150.000 USDC`: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a)
-- Approve và nạp `100.000 USDC` vào vault: [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
-- Tạo gói 1–5: [`0x80c93e...5d376e`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...641ccb`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...57ae17b`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...0157b4d`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...783ebed`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
+- Mint `150.000 USDC` + approve + nạp `100.000 USDC` vào vault: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a), [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
+- Tạo 5 gói (plan 1–5): [`0x80c93e...`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
 
-Giao dịch e2e giai đoạn `immediate`:
+Giao dịch e2e giai đoạn `immediate` (19 tx, tổng gas `77.866.819.359` wei):
 
-- Approve `SavingCore`: [`0x314359...af65bc`](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc)
-- Mở D1 `100 USDC`: [`0x2f74c3...333ba7`](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7)
-- Nạp thêm D1 `50 USDC`: [`0xb4b67e...1aaae`](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae)
-- Rút sớm một phần D1 `40 USDC`: [`0x6cecb9...6912bc`](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc)
-- Tạm dừng vault: [`0xac358e...bc6a32`](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32); bỏ tạm dừng: [`0x074d8e...7b1c26`](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26)
-- Rút phần chưa hứa `1 USDC`: [`0x7d17d3...d0591108`](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108); hoàn lại: [`0xbe2860...aad946`](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946)
-- Rút sớm toàn bộ D1: [`0xc8bc17...1e65da`](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da)
-- Mở T1–T6 gói 1 ngày: [`0x9d3e32...5f7005`](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [`0x8a3d8d...d59db1`](https://sepolia.etherscan.io/tx/0x8a3d8db465a7942ece5ef524f6f78123577694677776d2ee4e094bf4d8e59db1), [`0x10ed06...c97f77`](https://sepolia.etherscan.io/tx/0x10ed06b618b8e813874430c45b9d8b022f860a9a6a7d029a58e83b1492c97f77), [`0x951a99...cb9b13`](https://sepolia.etherscan.io/tx/0x951a996bc874ea3d823dbe140a60871b73f847306adcca40fe1b015479cb9b13), [`0x722565...c78f6`](https://sepolia.etherscan.io/tx/0x722565199005995df3b6c660c9465c5d3d84b2ac4b981a67269b19abd25c78f6), [`0x102995...f734f060`](https://sepolia.etherscan.io/tx/0x1029953dbe5ced9445e248f1f431c18b99c5ce0a567772e2fa9aefe2f734f060)
-- Rút sớm một phần T2: [`0x7c0ecc...5ed631`](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631)
-- Nạp thêm T3: [`0x8b3473...ed15ac`](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac)
-- Nạp ETH cho tài khoản thứ hai: [`0x3a0beb...9d9526`](https://sepolia.etherscan.io/tx/0x3a0bebf6d7bc56ed2c212f0a5a0b8a9c52b544ff2d2bd9b6d2acedf9b79d9526)
-- Chuyển NFT T4: [`0x7ca591...aaacab`](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab)
+- **D1 (gói 30 ngày, 100 USDC):** approve → mở sổ → nạp thêm 50 → rút sớm một phần 40 → rút sớm toàn bộ. Penalty 2,2 USDC chuyển đúng fee receiver.
+- **Pause/reserve/role:** pause chặn mở sổ/nạp thêm/rút sớm → unpause khôi phục; `setCoreOnce` lần 2, `grantRole`, `reserveInterest` từ deployer đều revert; rút `1 USDC` chưa hứa rồi hoàn lại, vault không đổi.
+- **T1–T6 (gói 1 ngày):** mở 6 sổ; rút sớm một phần T2; nạp thêm T3; chuyển NFT T4 sang tài khoản thứ hai; T1 rút sớm ngoài kịch bản.
+- **Invariant:** `reservedInterest` luôn bằng tổng lãi các sổ hoạt động cộng lãi chờ; vault luôn đủ tiền bảo đảm.
+
+Chi tiết từng tx hash: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc), [mở D1](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7), [nạp thêm D1](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae), [partial D1](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc), [pause](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32) / [unpause](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26), [rút 1 USDC](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108) / [hoàn lại](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946), [rút toàn bộ D1](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da), [T1–T6](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [partial T2](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631), [nạp thêm T3](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac), [chuyển NFT T4](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab).
+
+## Deliverables
+
+| Thành phần | Mô tả |
+| --- | --- |
+| Smart Contracts | `MockUSDC.sol` (ERC-20, 6 decimals, mint công khai), `VaultManager.sol` (vault, fee receiver, pause, reserve/release/pay), `SavingCore.sol` (gói, NFT, snapshot, tất toán, claim, nạp thêm, rút sớm, tái gửi). Interface `IVaultManager` định nghĩa kiểu dữ liệu cho lời gọi từ core sang vault. |
+| Kiểm thử | 89 kiểm thử Hardhat (contract) + 31 kiểm thử Vitest (frontend), độ bao phủ 100% dòng và câu lệnh. Bao phủ đầy đủ luồng bắt buộc và trường hợp biên: thiếu allowance, snapshot APR sau sửa gói, mốc đáo hạn/grace, rút hai lần, pause chặn mọi đường rút, chuyển NFT đổi chủ, penalty 0/100%, lãi làm tròn xuống 0. |
+| Frontend | React + TypeScript + Tailwind, kết nối ví injected qua EIP-6963 (MetaMask mặc định). Bốn luồng yêu cầu: xem gói, mở sổ, xem sổ, rút/tái gửi — cùng C1 (claim lãi chờ), C3 (rút sớm một phần), C4 (nạp thêm gốc). Song ngữ Việt–Anh, trạng thái kết nối/tải/rỗng/lỗi đầy đủ. |
+| Design Answers | Bảy câu trả lời trong README, đối ứng mục 8.2 đề bài, trình bày quy tắc, quyết định trong code và đánh đổi. |
+| Thông số cá nhân | MSSV `22665321` → `A=1`, `B=2`, grace 3 ngày, APR 225 bps, phạt 400 bps, kỳ hạn 90 ngày. Nguồn duy nhất: [contracts/config/personal.ts](contracts/config/personal.ts). |
+| Creative Challenges | C1 (trả gốc ngay, ghi nợ lãi), C2 (khóa lãi đã hứa), C3 (rút sớm một phần), C4 (nạp thêm gốc). Mỗi challenge có kiểm thử riêng và ghi chú problem/approach/trade-off/tests trong README. |
+| Demo video | _Chưa hoàn tất_ — video 3–5 phút walkthrough giao diện. |
 
 ## Lệnh thường dùng
 
@@ -357,7 +414,7 @@ Giao dịch e2e giai đoạn `immediate`:
 | `npm run dev` | chạy Vite tại cổng 5173 |
 | `npm run build` | kiểm tra kiểu và build bản production cho frontend |
 | `npm run lint` | chạy oxlint |
-| `npm test` | chạy 74 kiểm thử Hardhat |
+| `npm test` | chạy 89 kiểm thử Hardhat |
 | `npm run coverage` | chạy test kèm báo cáo coverage |
 | `npm run contracts:typecheck` | kiểm tra TypeScript phần contract |
 | `npm run contracts:compile` | compile contract bằng Hardhat |

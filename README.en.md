@@ -2,9 +2,9 @@
 
 [![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-d1d5db?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-111827?style=flat-square)](README.en.md)
 
-TÍCH is a term-deposit project built with smart contracts. Depositors put in MockUSDC, receive an NFT certificate (ERC-721) representing the deposit, and earn simple interest at the APR fixed when the deposit is opened. Depositors can add principal, settle at maturity, withdraw early and pay a penalty, claim deferred interest, or renew into a new term.
+TÍCH is an on-chain term-deposit system: depositors put in MockUSDC, receive an NFT certificate (ERC-721) and earn simple interest at the APR fixed when the deposit is opened. Depositors can top up principal (C4), settle at maturity, withdraw early in part (C3) or in full, claim deferred interest when the vault is short (C1), or renew into a new term.
 
-The React + TypeScript interface connects to injected wallets through EIP-6963 (MetaMask is the default; Rabby, Coinbase Wallet, Brave and other injected wallets also work) and reads from and writes to the three contracts directly. After connecting, balances, saving plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
+The React + TypeScript interface connects to injected wallets through EIP-6963 (MetaMask is the default; Rabby, Coinbase Wallet, Brave and other injected wallets also work), reading from and writing to the three contracts on Sepolia. After connecting, balances, plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
 
 ## Current status
 
@@ -28,6 +28,34 @@ Student ID **22665321**, last two digits: `A = 1` (units digit) and `B = 2` (ten
 | Default tenor | `B` even → 90 days | 90 days | Applied to the default plan |
 
 The single source of truth is [contracts/config/personal.ts](contracts/config/personal.ts). Tests, deploy scripts and the manifest all read from it. The grace period is an `immutable` constructor parameter, so it cannot be changed after deployment; changing the student ID requires deploying a new set of contracts.
+
+## Saving plan
+
+Each plan is a product the admin creates, equivalent to "deposit for 90 days, earn 2.25% APR." The fields stored in the `SavingPlan` struct:
+
+| Field | Meaning |
+| --- | --- |
+| `tenorDays` | Deposit duration (7, 30, 90, 180, 365 days…) |
+| `aprBps` | Annual interest rate in basis points (225 = 2.25%/year) |
+| `minDeposit` / `maxDeposit` | Optional min/max amount; `0` means no limit |
+| `earlyWithdrawPenaltyBps` | Early-withdrawal penalty (400 = 4%), charged on the withdrawn principal |
+| `enabled` | Admin can disable a plan to stop new deposits |
+
+When a deposit is opened, `aprBps` and `earlyWithdrawPenaltyBps` are snapshotted into the NFT certificate. Later plan edits only affect new deposits; existing certificates are never changed.
+
+## Admin functions
+
+The admin manages the system through `VaultManager` and `SavingCore`; existing deposits cannot be modified.
+
+| Function | Contract | Purpose |
+| --- | --- | --- |
+| `createPlan(tenorDays, aprBps, minDeposit, maxDeposit, penaltyBps)` | `SavingCore` | Create a new saving plan |
+| `updatePlan(planId, newAprBps)` | `SavingCore` | Change the APR; only affects future deposits |
+| `setPlanEnabled(planId, enabled)` | `SavingCore` | Enable/disable a plan; blocks new deposits when disabled |
+| `fundVault(amount)` | `VaultManager` | Deposit tokens into the vault to cover interest |
+| `withdrawVault(amount)` | `VaultManager` | Withdraw the unreserved part (`balance − reservedInterest`) |
+| `setFeeReceiver(address)` | `VaultManager` | Set the address that receives early-withdrawal penalties |
+| `pause()` / `unpause()` | `VaultManager` | Stop/resume all withdrawals, deposits and top-ups |
 
 ## Stack
 
@@ -168,6 +196,30 @@ penalty      = amount × penaltyBpsAtOpen / 10_000
 ```
 
 Five states: `Active`, `Withdrawn`, `ManualRenewed`, `AutoRenewed`, `PrincipalWithdrawn`. Three ways to end a deposit are settlement, full early withdrawal and manual renewal; all three check `status == Active` and `ownerOf(depositId) == msg.sender`. `topUpDeposit` only applies to an `Active` deposit before maturity. `claimInterest` only applies to a `PrincipalWithdrawn` deposit.
+
+### Events
+
+The five required events from the brief, plus supporting events for C1–C4:
+
+| Event | Contract | Meaning |
+| --- | --- | --- |
+| `PlanCreated(planId, tenorDays, aprBps)` | `SavingCore` | New plan created |
+| `PlanUpdated(planId, newAprBps)` | `SavingCore` | APR changed; only affects future deposits |
+| `PlanStatusChanged(planId, enabled)` | `SavingCore` | Plan enabled/disabled |
+| `DepositOpened(depositId, owner, planId, principal, maturityAt, aprBpsAtOpen)` | `SavingCore` | Deposit opened, NFT minted |
+| `Withdrawn(depositId, owner, principal, interest, isEarly)` | `SavingCore` | Settlement or full early withdrawal |
+| `Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId)` | `SavingCore` | Manual renewal or auto-renew |
+| `PartialEarlyWithdrawn(depositId, owner, amount, penalty, remainingPrincipal)` | `SavingCore` | Partial early withdrawal (C3) |
+| `DepositToppedUp(depositId, owner, amount, newPrincipal, interestAdded)` | `SavingCore` | Principal topped up (C4) |
+| `InterestDeferred(depositId, owner, amount)` | `SavingCore` | Interest recorded as debt when vault is short (C1) |
+| `InterestClaimed(depositId, owner, amount)` | `SavingCore` | Deferred interest claimed (C1) |
+| `VaultFunded(funder, amount)` | `VaultManager` | Vault funded |
+| `VaultWithdrawn(recipient, amount)` | `VaultManager` | Unreserved part withdrawn |
+| `FeeReceiverUpdated(previousReceiver, newReceiver)` | `VaultManager` | Fee receiver changed |
+| `InterestReserved(amount, totalReserved)` | `VaultManager` | Interest reserved on open/top-up (C2) |
+| `InterestReleased(amount, totalReserved)` | `VaultManager` | Reservation released on early withdrawal (C2) |
+| `InterestPaid(recipient, amount)` | `VaultManager` | Interest paid to depositor |
+| `CoreRoleLocked(core)` | `VaultManager` | `CORE_ROLE` locked after `setCoreOnce` (C2) |
 
 ## Design Answers
 
@@ -313,7 +365,7 @@ npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 2592
 | `VaultManager` | [`0xA128175f2C1099Ecc3933876a3d0BF931816867C`](https://sepolia.etherscan.io/address/0xA128175f2C1099Ecc3933876a3d0BF931816867C#code) |
 | `SavingCore` | [`0xC5Dd267CfefC629E722110F8086c0DDc33a5a302`](https://sepolia.etherscan.io/address/0xC5Dd267CfefC629E722110F8086c0DDc33a5a302#code) |
 
-Deployer, also the fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). The contracts were deployed at block `12018179`; the 12 setup transactions ended at block `12018193`, with actual total gas `478,354,062,456` wei (about `0.000478` ETH). The full manifest is at [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
+Deployer, also the fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contracts deployed at block `12018179`; 12 setup transactions ended at block `12018193`, total gas `478,354,062,456` wei (≈ `0.000478` ETH). Full manifest at [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
 
 Five on-chain plans:
 
@@ -325,30 +377,35 @@ Five on-chain plans:
 | 4 | 365 days | 4.00% | 2,500 USDC | 500,000 USDC | 5.00% |
 | 5 | 1 day | 0.50% | 10 USDC | 10,000 USDC | 1.00% |
 
-Deploy and setup transactions:
+Deploy and setup transactions (blocks `12018179`–`12018193`, total gas `478,354,062,456` wei ≈ `0.000478` ETH):
 
 - Deploy `MockUSDC`: [`0x68b959...c460a`](https://sepolia.etherscan.io/tx/0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a)
 - Deploy `VaultManager`: [`0x23176a...4fd8a`](https://sepolia.etherscan.io/tx/0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a)
 - Deploy `SavingCore`: [`0xb4612e...788c4`](https://sepolia.etherscan.io/tx/0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4)
 - `setCoreOnce`: [`0xdf3f3c...14960`](https://sepolia.etherscan.io/tx/0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960)
-- Mint `150,000 USDC`: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a)
-- Approve and fund the vault with `100,000 USDC`: [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
-- Create plans 1–5: [`0x80c93e...5d376e`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...641ccb`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...57ae17b`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...0157b4d`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...783ebed`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
+- Mint `150,000 USDC` + approve + fund vault with `100,000 USDC`: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a), [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
+- Create 5 plans: [`0x80c93e...`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
 
-`immediate` phase e2e transactions:
+`immediate` phase e2e transactions (19 tx, total gas `77,866,819,359` wei):
 
-- Approve `SavingCore`: [`0x314359...af65bc`](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc)
-- Open D1 with `100 USDC`: [`0x2f74c3...333ba7`](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7)
-- Top up D1 with `50 USDC`: [`0xb4b67e...1aaae`](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae)
-- Partial early withdrawal from D1 of `40 USDC`: [`0x6cecb9...6912bc`](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc)
-- Pause the vault: [`0xac358e...bc6a32`](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32); unpause: [`0x074d8e...7b1c26`](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26)
-- Withdraw the unreserved `1 USDC`: [`0x7d17d3...d0591108`](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108); return it: [`0xbe2860...aad946`](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946)
-- Fully early-withdraw D1: [`0xc8bc17...1e65da`](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da)
-- Open T1–T6 on the 1-day plan: [`0x9d3e32...5f7005`](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [`0x8a3d8d...d59db1`](https://sepolia.etherscan.io/tx/0x8a3d8db465a7942ece5ef524f6f78123577694677776d2ee4e094bf4d8e59db1), [`0x10ed06...c97f77`](https://sepolia.etherscan.io/tx/0x10ed06b618b8e813874430c45b9d8b022f860a9a6a7d029a58e83b1492c97f77), [`0x951a99...cb9b13`](https://sepolia.etherscan.io/tx/0x951a996bc874ea3d823dbe140a60871b73f847306adcca40fe1b015479cb9b13), [`0x722565...c78f6`](https://sepolia.etherscan.io/tx/0x722565199005995df3b6c660c9465c5d3d84b2ac4b981a67269b19abd25c78f6), [`0x102995...f734f060`](https://sepolia.etherscan.io/tx/0x1029953dbe5ced9445e248f1f431c18b99c5ce0a567772e2fa9aefe2f734f060)
-- Partial early withdrawal from T2: [`0x7c0ecc...5ed631`](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631)
-- Top up T3: [`0x8b3473...ed15ac`](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac)
-- Fund ETH for the second account: [`0x3a0beb...9d9526`](https://sepolia.etherscan.io/tx/0x3a0bebf6d7bc56ed2c212f0a5a0b8a9c52b544ff2d2bd9b6d2acedf9b79d9526)
-- Transfer the T4 NFT: [`0x7ca591...aaacab`](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab)
+- **D1 (30-day plan, 100 USDC):** approve → open → top up 50 → partial early withdraw 40 → full early withdraw. Penalty 2.2 USDC sent to the correct fee receiver.
+- **Pause/reserve/role:** pause blocked open/top-up/early withdraw → unpause restored; second `setCoreOnce`, `grantRole`, `reserveInterest` from deployer all revert; withdrew `1 USDC` unreserved then returned it, vault unchanged.
+- **T1–T6 (1-day plan):** opened 6 deposits; partial early withdrawal on T2; top-up on T3; transferred T4 NFT to a second account; T1 early-withdrawn outside the script.
+- **Invariant:** `reservedInterest` always equals total interest of active deposits plus deferred interest; vault always covers promised amounts.
+
+Individual tx hashes: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc), [open D1](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7), [top-up D1](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae), [partial D1](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc), [pause](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32) / [unpause](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26), [withdraw 1 USDC](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108) / [return](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946), [full withdraw D1](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da), [T1–T6](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [partial T2](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631), [top-up T3](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac), [transfer T4 NFT](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab).
+
+## Deliverables
+
+| Component | Description |
+| --- | --- |
+| Smart Contracts | `MockUSDC.sol` (ERC-20, 6 decimals, public mint), `VaultManager.sol` (vault, fee receiver, pause, reserve/release/pay), `SavingCore.sol` (plans, NFT, snapshots, settlement, claim, top-up, early withdrawal, renewal). Interface `IVaultManager` defines data types for core-to-vault calls. |
+| Tests | 89 Hardhat tests (contract) + 31 Vitest tests (frontend), 100% line and statement coverage. Covers all required flows and edge cases: missing allowance, APR snapshot after plan edit, maturity/grace boundaries, double withdrawal, pause blocking every path, NFT transfer changing owner, 0/100% penalty, interest rounding to 0. |
+| Frontend | React + TypeScript + Tailwind, injected-wallet connection via EIP-6963 (MetaMask default). Four required flows: view plans, open deposit, view deposits, withdraw/renew — plus C1 (claim deferred interest), C3 (partial early withdrawal), C4 (top-up). Bilingual VI–EN, with connect/loading/empty/error states. |
+| Design Answers | Seven answers in the README, corresponding to section 8.2 of the brief, covering the rule, the code decision and the trade-off. |
+| Personal Variant | Student ID `22665321` → `A=1`, `B=2`, grace 3 days, APR 225 bps, penalty 400 bps, tenor 90 days. Single source: [contracts/config/personal.ts](contracts/config/personal.ts). |
+| Creative Challenges | C1 (pay principal now, defer interest), C2 (lock promised interest), C3 (partial early withdrawal), C4 (top-up). Each challenge has its own tests and a README note covering problem/approach/trade-off/tests. |
+| Demo video | _Not yet completed_ — 3–5 minute frontend walkthrough. |
 
 ## Common commands
 
@@ -357,7 +414,7 @@ Deploy and setup transactions:
 | `npm run dev` | run Vite on port 5173 |
 | `npm run build` | type-check and build the frontend production bundle |
 | `npm run lint` | run oxlint |
-| `npm test` | run the 74 Hardhat tests |
+| `npm test` | run the 89 Hardhat tests |
 | `npm run coverage` | run tests with a coverage report |
 | `npm run contracts:typecheck` | type-check the contract TypeScript |
 | `npm run contracts:compile` | compile contracts with Hardhat |
