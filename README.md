@@ -1,5 +1,7 @@
 # TÍCH — Sổ tiết kiệm kỳ hạn on-chain
 
+[![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-111827?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-d1d5db?style=flat-square)](README.en.md)
+
 TÍCH là một dự án sổ tiết kiệm có kỳ hạn được triển khai bằng smart contract. Người gửi nạp MockUSDC, nhận chứng chỉ NFT (ERC-721) đại diện cho khoản tiền gửi và hưởng lãi đơn theo APR được cố định tại thời điểm mở sổ. Người gửi có thể nạp thêm gốc, tất toán đúng hạn, rút trước hạn và chịu phạt, nhận phần lãi còn chờ hoặc tái gửi sang kỳ hạn mới.
 
 Giao diện React + TypeScript kết nối MetaMask và đọc/ghi trực tiếp lên ba contract. Sau khi kết nối, số dư, gói tiết kiệm và sổ đều được đọc từ chain; trong thời gian chờ RPC, giao diện hiển thị trạng thái đang tải.

@@ -1,0 +1,357 @@
+# TÍCH — On-chain term deposits
+
+[![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-d1d5db?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-111827?style=flat-square)](README.en.md)
+
+TÍCH is a term-deposit project built with smart contracts. Depositors put in MockUSDC, receive an NFT certificate (ERC-721) representing the deposit, and earn simple interest at the APR fixed when the deposit is opened. Depositors can add principal, settle at maturity, withdraw early and pay a penalty, claim deferred interest, or renew into a new term.
+
+The React + TypeScript interface connects to MetaMask and reads from and writes to the three contracts directly. After connecting, balances, saving plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
+
+## Current status
+
+| Area | Status |
+| --- | --- |
+| Source and tests | C1–C4 fully implemented. 74/74 tests pass, 100% line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
+| Public Sepolia | Deployed on 2026-10-29 with 5 plans, a `100,000 USDC` vault and 12 setup transactions. All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
+| Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. The `mature` and `auto-renew` phases are ready but have to wait for real chain time. |
+| Not yet completed | Run `mature` from 2026-10-30 08:21 UTC and `auto-renew` from 2026-11-02 08:21 UTC; a MetaMask walkthrough on the real Sepolia deployment and a 3–5 minute demo video. |
+
+## Personal parameters
+
+Student ID **22665321**, last two digits: `A = 1` (units digit) and `B = 2` (tens digit).
+
+| Parameter | Formula | Value | Explanation |
+| --- | --- | --- | --- |
+| Grace period | `(A mod 3) + 2` days | 3 days (259,200 seconds) | 3-day wait after maturity before auto-renew |
+| Default APR | `200 + A × 25` bps | 225 bps = 2.25%/year | 100 bps equals 1% |
+| Early-withdrawal penalty | `300 + B × 50` bps | 400 bps = 4.00% | Charged on the principal withdrawn |
+| Default tenor | `B` even → 90 days | 90 days | Applied to the default plan |
+
+The single source of truth is [contracts/config/personal.ts](contracts/config/personal.ts). Tests, deploy scripts and the manifest all read from it. The grace period is an `immutable` constructor parameter, so it cannot be changed after deployment; changing the student ID requires deploying a new set of contracts.
+
+## Stack
+
+| Layer | Technology | Version |
+| --- | --- | --- |
+| Runtime | Node.js | 24.22.1 (LTS) |
+| Contracts | Solidity / Hardhat | 0.8.38 / 3.21.1 |
+| Contracts | OpenZeppelin Contracts | 5.6.1 |
+| Testing | Mocha / Chai / ethers | 12.0.3 / 6.3.0 / 6.17.0 |
+| Frontend | React / Vite | 19.3.1 / 8.3.5 |
+| Frontend | TypeScript / Tailwind CSS | 7.0.2 / 4.3.3 |
+| Frontend | ethers / React Router | 6.17.0 / 7.18.5 |
+
+The root `package.json` requires `engines.node >= 24.22.1`. Hardhat 3 fails immediately if Node is older.
+
+## Setup
+
+```powershell
+npm install
+npm --prefix contracts install
+npm --prefix frontend install
+```
+
+## Frontend configuration
+
+`configure:frontend` only accepts `testnet`; it reads [contracts/deployments/testnet.json](contracts/deployments/testnet.json) and writes `frontend/.env.local`:
+
+```powershell
+npm run configure:frontend -- testnet
+```
+
+Content generated for the current deployment:
+
+```text
+VITE_CHAIN_ID=11155111
+VITE_DEPLOY_BLOCK=12018179
+VITE_CORE_ADDRESS=0xC5Dd267CfefC629E722110F8086c0DDc33a5a302
+VITE_VAULT_ADDRESS=0xA128175f2C1099Ecc3933876a3d0BF931816867C
+VITE_USDC_ADDRESS=0x1fFa8aF3aF716E245A5501B086d1C01375F192fc
+```
+
+Only public addresses and the chain ID live in `VITE_*` variables; the private key is never placed here because every variable prefixed with `VITE_` is bundled. MetaMask signs transactions in the browser. If any of the three addresses is missing, [config.ts](frontend/src/contracts/config.ts) reports a configuration error instead of calling the contracts.
+
+## Running the interface
+
+```powershell
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)).
+
+Add the token to show the balance next to the wallet address: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC is the token used for testing and its `mint` function is public, so a wallet with no funds can still receive tokens: call `mint` on Etherscan Write Contract with the amount in 6 decimals (1,000 USDC = `1000000000`). The wallet also needs Sepolia ETH to pay gas; faucet lists are in chainlist or at [sepoliafaucet.com](https://sepoliafaucet.com).
+
+Main flow: on **Saving plans**, choose a tenor and open a deposit (the first time requires an `approve` for USDC, then `openDeposit`); on **My deposits**, view the NFT and settle, withdraw early in full or in part, add principal, claim deferred interest or renew.
+
+## Testing
+
+```powershell
+npm test
+npm run coverage
+npm run contracts:typecheck
+npm run build
+npm run lint
+```
+
+Latest run (2026-10-29):
+
+```text
+74 passing
+MockUSDC       100.00% lines / 100.00% statements
+VaultManager   100.00% lines / 100.00% statements
+SavingCore     100.00% lines / 100.00% statements
+Total          100.00% lines / 100.00% statements
+```
+
+The test suite covers the required flows and the edge cases most likely to break: missing allowance, APR snapshot after a plan edit, maturity/grace boundaries, double withdrawal, pause blocking every withdrawal path, NFT transfer changing the owner, penalties of 0/100% and interest rounding down to 0.
+
+- **C1:** principal paid out and interest deferred when the vault is short of money; claim after funding the vault; claim follows the NFT; pause blocks claim; a `PrincipalWithdrawn` deposit cannot be reused for settlement.
+- **C2:** only `SavingCore` holds `CORE_ROLE`; the admin cannot grant/revoke the role after it is locked; reserving more than the balance is blocked; `withdrawVault` is limited to `balance − reservedInterest`; when the vault loses its reserve, the admin cannot withdraw; release is correct on full or partial early withdrawal.
+- **C3:** 11 partial early withdrawal cases.
+- **C4:** mid-term top-up, multiple top-ups, proportional principal reduction and renewing a topped-up deposit.
+
+### E2E on real Sepolia
+
+`contracts/scripts/e2e` has three independent phases, stores progress in `contracts/deployments/testnet.e2e.json` (ignored) and only uses chain ID `11155111`:
+
+```powershell
+npm run test:sepolia            # immediate
+npm run test:sepolia:status     # re-read state, check timestamps
+npm run test:sepolia:mature     # after maturity
+npm run test:sepolia:auto-renew # after maturity + grace
+```
+
+Result of the `immediate` phase on 2026-10-29: 19 real transactions with total gas `77,866,819,359` wei. The script checked:
+
+- Opened 30-day plan D1 with `100 USDC`, topped up `50 USDC`, withdrew `40 USDC` early in part, and blocked a remainder below the minimum.
+- Pausing the vault blocked opening, top-up and early withdrawal; unpausing restored normal operation.
+- A second `setCoreOnce`, `grantRole(CORE_ROLE)` and `reserveInterest` from the deployer all revert.
+- `withdrawVault` beyond the unreserved part is blocked; withdrawing and returning `1 USDC` leaves the vault balance unchanged.
+- Fully early-withdrew D1; the `2.2 USDC` penalty (2% on the remaining `110 USDC`) went to the correct fee receiver.
+- Opened T1–T6 on the 1-day plan; partial early withdrawal on T2; top-up on T3; transferred the T4 NFT to a second account.
+- `reservedInterest` always equals the total interest of active deposits plus deferred interest, and the vault balance always covers the promised amounts.
+
+T1 (certificate #2) was early-withdrawn on chain at `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), outside the `immediate` script; the `mature` phase will skip T1, settle T2–T4, renew T6 into the 90-day plan and let the new owner of T4 withdraw. The `auto-renew` phase will renew T5 after grace. These two phases cannot run before real chain time; `test:sepolia:status` prints the earliest timestamps.
+
+## Architecture
+
+| Contract | Holds | Main functions |
+| --- | --- | --- |
+| `MockUSDC` | no money | ERC-20 with 6 decimals, public `mint` for testing |
+| `VaultManager` | the bank's interest money | vault deposits/withdrawals, fee receiver, pause, reserve/release/pay interest |
+| `SavingCore` | depositors' principal | plans, NFT certificates, snapshots, settlement, claim, top-up, early withdrawal, renewal |
+| `IVaultManager` | — | interface defining data types for calls from core to vault |
+
+Principal and interest are kept separate so settling one deposit does not draw on other depositors' principal. `SavingCore` only pays back principal equal to what it received when the deposit was opened; all interest flows through `VaultManager`. With C1, if the vault is short of money at maturity, principal is still paid immediately and interest is recorded as debt in `pendingInterest`; the current NFT owner calls `claimInterest` once the vault has funds. Renewal remains atomic: if the vault lacks interest, the whole renewal transaction reverts.
+
+Each deposit stores `principal`, `aprBpsAtOpen`, `penaltyBpsAtOpen`, `tenorDays`, `openedAt`, `maturityAt`, `status` and `principalSeconds`; later plan edits only affect new deposits.
+
+```text
+open:        principalSeconds = principal × tenorDays × 1 day
+top-up:      principalSeconds += amount × (maturityAt − block.timestamp)
+interest     = principalSeconds × aprBpsAtOpen / (365 × 86_400 × 10_000)
+penalty      = amount × penaltyBpsAtOpen / 10_000
+```
+
+Five states: `Active`, `Withdrawn`, `ManualRenewed`, `AutoRenewed`, `PrincipalWithdrawn`. Three ways to end a deposit are settlement, full early withdrawal and manual renewal; all three check `status == Active` and `ownerOf(depositId) == msg.sender`. `topUpDeposit` only applies to an `Active` deposit before maturity. `claimInterest` only applies to a `PrincipalWithdrawn` deposit.
+
+## Design Answers
+
+The seven questions below correspond to section 8.2 of the brief. Each answer covers the rule, the decision in the code and the trade-off.
+
+### 1. If Alice transfers the NFT to Bob, who can withdraw?
+
+Bob. Because the certificate is an NFT, the right to withdraw belongs to whoever currently owns the NFT. `_requireActiveOwner` checks `ownerOf(depositId) == msg.sender` in `withdrawAtMaturity`, `earlyWithdraw`, `earlyWithdrawPartial` and `renewDeposit`; `claimInterest` checks the NFT owner separately; `topUpDeposit` uses the shared `_requireActiveOwner`. Auto-renew mints a new deposit for the current NFT owner. If Alice calls after transferring, the transaction reverts with `Core: not certificate owner`.
+
+Trade-off: losing the wallet or transferring to the wrong address also loses the withdrawal right, and the bank cannot intervene. On the other hand, someone who needs cash urgently can sell the deposit on the secondary market instead of taking the 4% penalty.
+
+### 2. What happens if the vault is short of money at maturity?
+
+Principal is still paid immediately, while interest is deferred and received later (C1). `withdrawAtMaturity` wraps the `vault.payInterest` call in `try/catch`; if the vault reverts, the deposit moves to `PrincipalWithdrawn`, the interest is recorded in `pendingInterest[depositId]`, an `InterestDeferred` event is emitted and the principal is still paid in full. The current NFT owner calls `claimInterest` once the vault is funded. The function clears the debt before calling the vault; if the vault is still short, the whole transaction reverts and the user can try again. Claims are also blocked when the system is paused.
+
+Trade-off: deferred interest is not pushed to the wallet, so the user has to come back to claim; the frontend shows the `Interest pending` state. Manual renewal and auto-renew still follow an all-or-nothing rule because they need the interest to form the new principal.
+
+### 3. If the auto-renew bot goes down for a month, who loses?
+
+Nobody loses money. The bot only calls the renewal function on the user's behalf: the old deposit keeps its `Active` status, is not deleted and does not lose interest already recorded. The user can still withdraw with `withdrawAtMaturity` or renew with `renewDeposit` at any time after maturity. Because `autoRenewDeposit` lets any address call after maturity plus grace, the user's own wallet or a third party can stand in for the bot.
+
+The only impact is that the money stays in the deposit for another month instead of being renewed. A future improvement could add a renew button at the grace mark and a backup bot.
+
+### 4. How is the remainder handled when splitting interest?
+
+For interest, the remainder stays in the vault; for penalties, the remainder is returned with the principal to the withdrawer. Both use `Math.mulDiv` in `_interestFor` and `_penaltyFor`: multiply before dividing and always round down, so the amount paid only gets smaller and is never negative. An interest amount of 2.777... USDC pays 2.77 USDC; the fraction below one 6-decimal unit stays in the vault.
+
+Interest rounding down to 0 does not cause a stuck deposit either: `withdrawAtMaturity` has `if (interest > 0)`, so it skips the vault and still pays the principal in full. A test opens a 1-unit deposit at 1 bps APR with a 1-day tenor and still withdraws the principal normally. There is no separate accounting ledger, so the remainder cannot be withdrawn twice.
+
+### 5. Is a transaction at the exact maturity moment an early withdrawal or an on-time one?
+
+It is an on-time withdrawal. Before `maturityAt` is early; from that moment on it is on time, with no transition window. `withdrawAtMaturity` and `renewDeposit` use `>=`; `earlyWithdraw` and `earlyWithdrawPartial` use `<`. Using `>=` ensures that someone settling exactly at maturity is not penalized by mistake.
+
+Auto-renew requires `block.timestamp >= maturityAt + gracePeriod`, so renewal is possible exactly when grace ends. Users can still renew manually in the last second of grace if the bot has not run yet, because `renewDeposit` only requires `>= maturityAt` and does not depend on grace.
+
+### 6. What happens if the admin disables a plan while deposits are still active?
+
+Active deposits are unaffected. When a deposit is opened, the contract has already snapshotted the APR, tenor and penalty into that deposit, so editing or disabling the plan later only affects newly opened deposits. `setPlanEnabled` only changes the `enabled` flag. Holders of old deposits can still settle, withdraw early in full or in part at the old rates, or renew into another enabled plan.
+
+Two exceptions: manual renewal into a disabled plan is blocked because `renewDeposit` requires `newPlan.enabled`; auto-renew still uses the original plan because that is the commitment made to the original depositor.
+
+### 7. A real attack scenario and how it is prevented
+
+Scenario: withdrawing money twice, including a nested call while the first transaction is still in flight (reentrancy). Four layers of protection:
+
+1. Eight functions that move money (`openDeposit`, `withdrawAtMaturity`, `claimInterest`, `topUpDeposit`, `earlyWithdraw`, `earlyWithdrawPartial`, `renewDeposit`, `autoRenewDeposit`) all carry `nonReentrant`.
+2. State is updated before money is transferred, so a second withdrawal stops at `_requireActiveOwner` with `Core: deposit inactive`. `claimInterest` clears `pendingInterest` before calling the vault; `earlyWithdrawPartial` reduces `principal` and `principalSeconds` before transferring money.
+3. `VaultManager` only accepts calls from `SavingCore`; `asset` and `vault` are `immutable`, so they cannot be replaced by a fake contract after deployment.
+4. C2 maintains `reservedInterest`; `withdrawVault` only allows withdrawing the unreserved part and `payInterest` rejects unreserved amounts. `setCoreOnce` locks `CORE_ROLE` and `reserveInterest` requires the reserve to be backed by real money.
+
+Remaining limitation: the reservation is only an accounting ledger inside the same vault, not a separate escrow; the admin remains a trusted role for plans, pause, fee receiver and the unreserved part. Reducing trust requires a multisig/timelock.
+
+## Creative Challenge C1 — Pay principal now, defer interest
+
+**Problem.** The brief requires `withdrawAtMaturity` to revert if the vault lacks interest, which locks the depositor's principal behind the bank's interest debt even though the principal is fully available in `SavingCore`.
+
+**Approach.** `withdrawAtMaturity` wraps `vault.payInterest` in `try/catch`. If the vault can pay, the deposit becomes `Withdrawn`. If not, the deposit becomes `PrincipalWithdrawn`, the interest goes into `pendingInterest` and an `InterestDeferred` event is emitted; the principal is still transferred immediately. `claimInterest` lets the current NFT owner receive exactly the recorded debt, clears the debt before calling the vault and is blocked when paused. The pending amount stays inside `reservedInterest`, so C2 does not let the admin withdraw it.
+
+**Trade-off.** The user has to come back to claim; a deposit whose principal has been paid cannot be used for renewal or further withdrawals; renew/auto-renew still revert when the vault lacks interest.
+
+**Tests.** Five cases: paying principal and recording the debt, claiming after funding the vault, the claim following the NFT, pause blocking claims, and a `PrincipalWithdrawn` deposit not being reusable for settlement. On Sepolia the vault is fully funded, so a shortfall cannot be created without breaking C2; C1 is only covered by the unit tests.
+
+## Creative Challenge C2 — Lock the promised interest
+
+**Problem.** If the admin can withdraw freely, the admin can withdraw exactly the interest owed to active deposits. Depositors still see the expected interest in the interface but only find out the vault is empty at maturity.
+
+**Approach.**
+
+- `VaultManager` stores `reservedInterest`, accumulating every promised interest amount.
+- `SavingCore` calls `reserveInterest` when opening a deposit and when topping up; calls `releaseInterest` on full early withdrawal or a partial principal reduction; `payInterest` subtracts from the reservation when paying interest.
+- `withdrawVault` only lets the admin withdraw `balance − reservedInterest`; if `balance < reservedInterest` it reverts with `Vault: undercollateralized`.
+- `setCoreOnce(address)` grants `CORE_ROLE` to `SavingCore` exactly once, then sets the admin of `CORE_ROLE` to `CORE_ROLE` itself. After that, `DEFAULT_ADMIN_ROLE` can no longer grant/revoke `CORE_ROLE`.
+- `reserveInterest` rejects the call if `reservedInterest + amount > vault balance`, so the invariant `balance >= reservedInterest` holds from the moment of reservation.
+
+**Trade-off.**
+
+- The vault must be funded before opening a deposit or topping up; otherwise the transaction reverts instead of recording interest with no money behind it.
+- This is still an accounting ledger, not a separate escrow. If tokens are lost or drained from the vault, the invariant is violated; `withdrawVault` is then blocked and C1 still protects the principal.
+- The admin remains a trusted role for plans, pause, fee receiver and the unreserved part.
+
+**Tests.** The cases in `VaultManager.ts` check role locking, one-time setup, reserving beyond the balance, the admin withdrawal cap, the vault losing its reserve and release on early withdrawal. The open, top-up and settlement cases in `SavingCore.ts` also check that `reservedInterest` increases/decreases accordingly.
+
+**Sepolia status.** The `0xC5Dd267C…a302` build includes full C2: `setCoreOnce`, locked `CORE_ROLE`, guaranteed reserves and the withdrawal cap. The `immediate` phase verified it on the real chain.
+
+## Creative Challenge C3 — Partial early withdrawal
+
+**Problem.** `earlyWithdraw` only supports full withdrawal: even when only a small part is needed, the depositor still has to close the whole deposit and pay a 4% penalty on the entire principal.
+
+**Approach.** `earlyWithdrawPartial` only runs before `maturityAt`, when the deposit is `Active` and the caller is the current NFT owner. The penalty is charged on exactly the withdrawn amount; the remaining `principal - amount` must be `>= minDeposit` of the plan, otherwise it reverts with `Core: remaining below minimum`. APR, penalty, tenor and `maturityAt` stay the same; the NFT stays the same and only `principal` is reduced. The withdrawn part earns no interest; maturity interest is calculated on the remaining part. Event: `PartialEarlyWithdrawn(depositId, owner, amount, penalty, remainingPrincipal)`.
+
+Example: a 1,000 USDC deposit in a plan with a 500 USDC minimum; early-withdrawing 200 USDC incurs an 8 USDC penalty, pays 192 USDC, and the remaining 800 USDC continues to the original maturity date. For a 500 USDC deposit, withdrawing 200 USDC would leave 300 USDC, below the 500 USDC minimum, so the transaction reverts; the only option is a full `earlyWithdraw`.
+
+**Trade-off.** The deposit is not split into separate parts: one NFT and one `depositId`, with history read from events. Withdrawals that would leave less than the minimum are not possible. Future interest decreases with the remaining principal.
+
+**Tests.** 11 cases: penalty on the withdrawn part, keeping the snapshot, remaining minimum, owner/NFT, pause, 0/100% penalty, maturity interest on the remainder and full withdrawal after a partial one. The frontend is integrated: full withdrawal is the default, and a smaller amount calls `earlyWithdrawPartial`.
+
+## Creative Challenge C4 — Top-up into a running deposit
+
+**Problem.** An opened deposit does not accept more money: adding funds means opening a new deposit, losing the original maturity date and taking the new APR.
+
+**Approach.** `Deposit` adds `principalSeconds`. When a deposit is opened, the value equals `principal × tenorDays × 1 day`; interest is calculated as `principalSeconds × aprBpsAtOpen / (365 days × 10,000)`. `topUpDeposit` only runs when the deposit is `Active`, before maturity, with the correct NFT owner and the system not paused. The contract accepts additional principal, adds `amount × (maturityAt − block.timestamp)` to `principalSeconds`, then reserves exactly the extra interest. Tenor, APR, penalty and `maturityAt` stay the same; no new NFT is minted and the `depositId` does not change. `principalSeconds` is reduced proportionally on partial early withdrawal, so the withdrawn part stops earning interest.
+
+Example: a 1,000 USDC deposit with a 90-day tenor, topped up with 500 USDC after 30 days. The new 500 USDC only earns interest for the remaining 60 days. The original plan's `maxDeposit` limit still applies to the total principal after the top-up.
+
+**Trade-off.** Not split into separate parts: top-up history is read from the `DepositToppedUp` event and all principal shares one APR snapshot. Top-ups are not possible after maturity. If the deposit is early-withdrawn afterwards, the penalty is charged on the entire remaining principal at the original snapshot.
+
+**Tests.** Four cases: mid-term top-up with interest based on principal-seconds and the correct reserve increase, rejection of wrong owner/zero amount/above the maximum/pause/after maturity, proportional reduction after a partial early withdrawal, and renewing a topped-up deposit.
+
+## Deploying to Sepolia
+
+The `testnet` network is fixed at chain ID `11155111`; the repo has no local, fork or parallel deploy script. Hardhat's in-process network (`31337`) is only used for unit tests. Deployment needs `TESTNET_RPC_URL` and `DEPLOYER_PRIVATE_KEY`; source verification additionally needs `ETHERSCAN_API_KEY`. These can be placed in `contracts/.env` (ignored) or passed for the PowerShell session only:
+
+```powershell
+$env:TESTNET_RPC_URL='https://ethereum-sepolia-rpc.publicnode.com'
+$env:DEPLOYER_PRIVATE_KEY='0x...'
+$env:FEE_RECEIVER_ADDRESS='0x...'                     # optional, defaults to the deployer
+$env:EXPLORER_BASE_URL='https://sepolia.etherscan.io'  # optional, only written to the manifest
+$env:ETHERSCAN_API_KEY='...'                           # only needed for source verification
+
+npm run deploy:testnet:dry   # estimate gas, no transactions sent
+npm run deploy:testnet
+npm run verify:testnet
+npm run configure:frontend -- testnet
+```
+
+`deploy:testnet:dry` only reads the RPC and prints the worst-case cost. `verify:testnet` compares the manifest with the real chain: chain ID, addresses derived from receipts, nonce continuity, block range, gas, bytecode presence, token–vault–core wiring, `vault.core()`, the admin of `CORE_ROLE` being locked, fee receiver, grace period, exactly 5 plans, the vault funding and `reservedInterest <= vault balance`. Once e2e has opened deposits, add `ALLOW_POST_E2E=1` to skip the fresh-deploy snapshot checks.
+
+Source verification runs inside `contracts/`:
+
+```powershell
+npx hardhat verify --network testnet <MockUSDC>
+npx hardhat verify --network testnet <VaultManager> <MockUSDC> <admin> <feeReceiver>
+npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 259200
+```
+
+### Current deployment
+
+| Contract | Sepolia address |
+| --- | --- |
+| `MockUSDC` | [`0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`](https://sepolia.etherscan.io/address/0x1fFa8aF3aF716E245A5501B086d1C01375F192fc#code) |
+| `VaultManager` | [`0xA128175f2C1099Ecc3933876a3d0BF931816867C`](https://sepolia.etherscan.io/address/0xA128175f2C1099Ecc3933876a3d0BF931816867C#code) |
+| `SavingCore` | [`0xC5Dd267CfefC629E722110F8086c0DDc33a5a302`](https://sepolia.etherscan.io/address/0xC5Dd267CfefC629E722110F8086c0DDc33a5a302#code) |
+
+Deployer, also the fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). The contracts were deployed at block `12018179`; the 12 setup transactions ended at block `12018193`, with actual total gas `478,354,062,456` wei (about `0.000478` ETH). The full manifest is at [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
+
+Five on-chain plans:
+
+| Plan | Tenor | APR | Minimum | Maximum | Early penalty |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 30 days | 1.75% | 100 USDC | 25,000 USDC | 2.00% |
+| 2 | 90 days | 2.25% | 500 USDC | 100,000 USDC | 4.00% |
+| 3 | 180 days | 3.00% | 1,000 USDC | 250,000 USDC | 4.50% |
+| 4 | 365 days | 4.00% | 2,500 USDC | 500,000 USDC | 5.00% |
+| 5 | 1 day | 0.50% | 10 USDC | 10,000 USDC | 1.00% |
+
+Deploy and setup transactions:
+
+- Deploy `MockUSDC`: [`0x68b959...c460a`](https://sepolia.etherscan.io/tx/0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a)
+- Deploy `VaultManager`: [`0x23176a...4fd8a`](https://sepolia.etherscan.io/tx/0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a)
+- Deploy `SavingCore`: [`0xb4612e...788c4`](https://sepolia.etherscan.io/tx/0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4)
+- `setCoreOnce`: [`0xdf3f3c...14960`](https://sepolia.etherscan.io/tx/0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960)
+- Mint `150,000 USDC`: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a)
+- Approve and fund the vault with `100,000 USDC`: [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
+- Create plans 1–5: [`0x80c93e...5d376e`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...641ccb`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...57ae17b`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...0157b4d`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...783ebed`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
+
+`immediate` phase e2e transactions:
+
+- Approve `SavingCore`: [`0x314359...af65bc`](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc)
+- Open D1 with `100 USDC`: [`0x2f74c3...333ba7`](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7)
+- Top up D1 with `50 USDC`: [`0xb4b67e...1aaae`](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae)
+- Partial early withdrawal from D1 of `40 USDC`: [`0x6cecb9...6912bc`](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc)
+- Pause the vault: [`0xac358e...bc6a32`](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32); unpause: [`0x074d8e...7b1c26`](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26)
+- Withdraw the unreserved `1 USDC`: [`0x7d17d3...d0591108`](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108); return it: [`0xbe2860...aad946`](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946)
+- Fully early-withdraw D1: [`0xc8bc17...1e65da`](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da)
+- Open T1–T6 on the 1-day plan: [`0x9d3e32...5f7005`](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [`0x8a3d8d...d59db1`](https://sepolia.etherscan.io/tx/0x8a3d8db465a7942ece5ef524f6f78123577694677776d2ee4e094bf4d8e59db1), [`0x10ed06...c97f77`](https://sepolia.etherscan.io/tx/0x10ed06b618b8e813874430c45b9d8b022f860a9a6a7d029a58e83b1492c97f77), [`0x951a99...cb9b13`](https://sepolia.etherscan.io/tx/0x951a996bc874ea3d823dbe140a60871b73f847306adcca40fe1b015479cb9b13), [`0x722565...c78f6`](https://sepolia.etherscan.io/tx/0x722565199005995df3b6c660c9465c5d3d84b2ac4b981a67269b19abd25c78f6), [`0x102995...f734f060`](https://sepolia.etherscan.io/tx/0x1029953dbe5ced9445e248f1f431c18b99c5ce0a567772e2fa9aefe2f734f060)
+- Partial early withdrawal from T2: [`0x7c0ecc...5ed631`](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631)
+- Top up T3: [`0x8b3473...ed15ac`](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac)
+- Fund ETH for the second account: [`0x3a0beb...9d9526`](https://sepolia.etherscan.io/tx/0x3a0bebf6d7bc56ed2c212f0a5a0b8a9c52b544ff2d2bd9b6d2acedf9b79d9526)
+- Transfer the T4 NFT: [`0x7ca591...aaacab`](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab)
+
+## Common commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | run Vite on port 5173 |
+| `npm run build` | type-check and build the frontend production bundle |
+| `npm run lint` | run oxlint |
+| `npm test` | run the 74 Hardhat tests |
+| `npm run coverage` | run tests with a coverage report |
+| `npm run contracts:typecheck` | type-check the contract TypeScript |
+| `npm run contracts:compile` | compile contracts with Hardhat |
+| `npm run contracts:export-abis` | compile and regenerate `frontend/src/contracts/abis.ts` |
+| `npm run deploy:testnet:dry` | estimate Sepolia deploy gas without sending transactions |
+| `npm run deploy:testnet` | deploy to Sepolia |
+| `npm run verify:testnet` | verify the Sepolia deployment |
+| `npm run configure:frontend -- testnet` | write `frontend/.env.local` from the manifest |
+| `npm run test:sepolia` | run the `immediate` phase on real Sepolia |
+| `npm run test:sepolia:status` | read phase state and timestamps |
+| `npm run test:sepolia:mature` | run the post-maturity settlement/renewal phase |
+| `npm run test:sepolia:auto-renew` | run the auto-renew phase after grace |
+
+All deploy, verify and e2e commands are locked to chain ID `11155111`; the repo has no local, fork or parallel deploy script. The in-process `31337` network is only for unit tests.
