@@ -5,6 +5,8 @@ artifacts/
 cache/
 # Local working notes; intentionally not part of the submitted repo
 docs/
+AGENTS.md
+.agents/skills/fintech-product-ui/
 .env
 .env.*
 !.env.example
