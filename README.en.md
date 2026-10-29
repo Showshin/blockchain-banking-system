@@ -10,7 +10,7 @@ The React + TypeScript interface connects to injected wallets through EIP-6963 (
 
 | Area | Status |
 | --- | --- |
-| Source and tests | C1–C4 fully implemented. 74/74 tests pass, 100% line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
+| Source and tests | C1–C4 fully implemented. 89/89 contract tests pass, 31/31 frontend tests pass, 100% line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
 | Public Sepolia | Deployed on 2026-10-29 with 5 plans, a `100,000 USDC` vault and 12 setup transactions. All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
 | Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. The `mature` and `auto-renew` phases are ready but have to wait for real chain time. |
 | MetaMask walkthrough | On 2026-10-29 wallet `0xE197…f731` opened deposit #8, topped it up, made a partial early withdrawal and then a full early withdrawal directly in the interface; switching VI↔EN survives a reload. Details and hashes are in the walkthrough section below. |
@@ -87,23 +87,25 @@ Main flow: on **Saving plans**, choose a tenor and open a deposit (the first tim
 
 ```powershell
 npm test
+npm run test:frontend
 npm run coverage
 npm run contracts:typecheck
 npm run build
 npm run lint
 ```
 
-Latest run (2026-10-29):
+Latest run (2026-10-30):
 
 ```text
-74 passing
+89 passing (contract)
+31 passing (frontend, Vitest)
 MockUSDC       100.00% lines / 100.00% statements
 VaultManager   100.00% lines / 100.00% statements
 SavingCore     100.00% lines / 100.00% statements
 Total          100.00% lines / 100.00% statements
 ```
 
-The test suite covers the required flows and the edge cases most likely to break: missing allowance, APR snapshot after a plan edit, maturity/grace boundaries, double withdrawal, pause blocking every withdrawal path, NFT transfer changing the owner, penalties of 0/100% and interest rounding down to 0.
+The test suite covers the required flows and the edge cases most likely to break: missing allowance, APR snapshot after a plan edit, maturity/grace boundaries, double withdrawal, pause blocking every withdrawal path, NFT transfer changing the owner, penalties of 0/100%, interest rounding down to 0, top-up then maturity, partial then renew/auto-renew and the renew boundaries.
 
 - **C1:** principal paid out and interest deferred when the vault is short of money; claim after funding the vault; claim follows the NFT; pause blocks claim; a `PrincipalWithdrawn` deposit cannot be reused for settlement.
 - **C2:** only `SavingCore` holds `CORE_ROLE`; the admin cannot grant/revoke the role after it is locked; reserving more than the balance is blocked; `withdrawVault` is limited to `balance − reservedInterest`; when the vault loses its reserve, the admin cannot withdraw; release is correct on full or partial early withdrawal.

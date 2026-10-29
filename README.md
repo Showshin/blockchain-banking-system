@@ -10,7 +10,7 @@ Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask l
 
 | Phạm vi | Trạng thái |
 | --- | --- |
-| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 74/74 kiểm thử đạt, độ bao phủ 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
+| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 89/89 kiểm thử contract đạt, 31/31 test frontend đạt, độ bao phủ 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
 | Sepolia công khai | Triển khai ngày 2026-10-29 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập. Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
 | Kiểm thử E2E trên Sepolia | Giai đoạn `immediate` hoàn tất ngày 2026-10-29: mở sổ, nạp thêm gốc, rút sớm một phần, kiểm tra pause/role/reserve, rút sớm toàn bộ, chuyển NFT và kiểm tra invariant. Hai giai đoạn `mature` và `auto-renew` đã sẵn sàng nhưng phải chờ thời gian thực của chain. |
 | Walkthrough MetaMask | Ngày 2026-10-29, ví `0xE197…f731` mở sổ #8, nạp thêm, rút sớm một phần rồi rút sớm toàn bộ trực tiếp trên giao diện; đổi ngôn ngữ VI↔EN giữ nguyên sau khi tải lại. Chi tiết và hash ở mục walkthrough bên dưới. |
@@ -87,23 +87,25 @@ Luồng chính: tại **Gói tiết kiệm**, chọn kỳ hạn và mở sổ (l
 
 ```powershell
 npm test
+npm run test:frontend
 npm run coverage
 npm run contracts:typecheck
 npm run build
 npm run lint
 ```
 
-Kết quả lần chạy gần nhất (2026-10-29):
+Kết quả lần chạy gần nhất (2026-10-30):
 
 ```text
-74 passing
+89 passing (contract)
+31 passing (frontend, Vitest)
 MockUSDC       100.00% lines / 100.00% statements
 VaultManager   100.00% lines / 100.00% statements
 SavingCore     100.00% lines / 100.00% statements
 Total          100.00% lines / 100.00% statements
 ```
 
-Bộ kiểm thử bao phủ các luồng bắt buộc và những trường hợp dễ phát sinh lỗi: thiếu allowance, snapshot APR sau khi sửa gói, mốc biên đáo hạn/grace, rút hai lần, pause chặn mọi cách rút, chuyển NFT đổi chủ, penalty 0/100% và lãi làm tròn xuống 0.
+Bộ kiểm thử bao phủ các luồng bắt buộc và những trường hợp dễ phát sinh lỗi: thiếu allowance, snapshot APR sau khi sửa gói, mốc biên đáo hạn/grace, rút hai lần, pause chặn mọi cách rút, chuyển NFT đổi chủ, penalty 0/100%, lãi làm tròn xuống 0, top-up rồi tất toán, partial rồi renew/auto-renew và các ranh giới renew.
 
 - **C1:** trả gốc và ghi nợ lãi khi vault thiếu tiền; claim sau khi nạp vault; claim đi theo NFT; pause chặn claim; sổ `PrincipalWithdrawn` không được dùng lại cho việc tất toán.
 - **C2:** chỉ `SavingCore` giữ `CORE_ROLE`; admin không thể grant/revoke role sau khi khóa; reserve vượt số dư bị chặn; `withdrawVault` bị giới hạn ở `balance − reservedInterest`; khi vault mất dự trữ, admin không thể rút; release đúng khi rút sớm toàn bộ hoặc một phần.
