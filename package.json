@@ -15,6 +15,7 @@
     "contracts:export-abis": "npm --prefix contracts run export:abis",
     "contracts:typecheck": "npm --prefix contracts run typecheck",
     "test": "npm --prefix contracts run test",
+    "test:frontend": "npm --prefix frontend run test",
     "coverage": "npm --prefix contracts run coverage",
     "deploy:testnet:dry": "npm --prefix contracts run deploy:testnet:dry",
     "deploy:testnet": "npm --prefix contracts run deploy:testnet",

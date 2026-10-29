@@ -64,7 +64,37 @@ export function formatAddress(address: string | null): string {
 }
 
 export function parseAmount(value: string): number {
-  const normalized = value.replace(/\s/g, '').replace(/,/g, '.')
+  const cleaned = value.replace(/\s/g, '')
+  if (!cleaned) return 0
+
+  const lastComma = cleaned.lastIndexOf(',')
+  const lastDot = cleaned.lastIndexOf('.')
+  let normalized = cleaned
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    // Both separators exist: the last one is the decimal separator.
+    normalized =
+      lastComma > lastDot
+        ? cleaned.replace(/\./g, '').replace(',', '.')
+        : cleaned.replace(/,/g, '')
+  } else if (lastComma >= 0 || lastDot >= 0) {
+    const separator = lastComma >= 0 ? ',' : '.'
+    const parts = cleaned.split(separator)
+    if (parts.length > 2) {
+      // Multiple identical separators can only be thousands grouping.
+      normalized = parts.join('')
+    } else {
+      const [whole, fraction = ''] = parts
+      const looksGrouped =
+        fraction.length === 3 &&
+        whole.length > 0 &&
+        whole.length <= 3 &&
+        whole !== '0' &&
+        !whole.startsWith('0')
+      normalized = looksGrouped ? whole + fraction : `${whole}.${fraction}`
+    }
+  }
+
   const parsed = Number.parseFloat(normalized)
   return Number.isFinite(parsed) ? parsed : 0
 }

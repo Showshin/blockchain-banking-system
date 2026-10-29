@@ -272,7 +272,7 @@ Ví dụ: sổ 1.000 USDC kỳ hạn 90 ngày, nạp thêm 500 USDC sau 30 ngày
 
 **Đánh đổi.** Không tách thành các phần riêng: lịch sử nạp thêm được đọc từ sự kiện `DepositToppedUp` và mọi khoản gốc dùng chung một snapshot APR. Không thể nạp thêm sau đáo hạn. Nếu rút sớm sau đó, mức phạt được tính trên toàn bộ gốc còn lại theo snapshot ban đầu.
 
-**Ranh giới.** `maxDeposit` được kiểm tra khi mở sổ và khi nạp thêm, nhưng không kiểm tra lại ở `renewDeposit` và `autoRenewDeposit`. Gốc mới bằng gốc cũ cộng lãi nên luôn cao hơn mức tối thiểu, nhưng có thể vượt `maxDeposit` một chút. Bản này chấp nhận ranh giới đó vì chặn tái gửi sẽ khóa sổ đã đáo hạn; `maxDeposit` được hiểu là giới hạn cho vốn mới.
+**Ranh giới.** `maxDeposit` được kiểm tra khi mở sổ và khi nạp thêm, nhưng không kiểm tra lại ở `renewDeposit` và `autoRenewDeposit`. Với `renewDeposit` sang gói khác, `minDeposit` của gói mới cũng không được kiểm tra: gốc mới bằng gốc cũ cộng lãi, nên nếu gói mới có mức tối thiểu cao hơn, sổ mới có thể nằm dưới min. Với `autoRenewDeposit`, gói gốc được dùng lại nên min luôn đạt, nhưng gốc mới có thể vượt `maxDeposit` một chút. Bản này chấp nhận ranh giới đó vì chặn tái gửi sẽ khóa sổ đã đáo hạn; `maxDeposit` được hiểu là giới hạn cho vốn mới. Nếu muốn chặn, thêm kiểm tra min/max trong `renewDeposit` và test revert tương ứng.
 
 **Kiểm thử.** Bốn trường hợp: nạp thêm giữa kỳ với lãi theo principal-seconds và reserve tăng đúng, chặn sai chủ/giá trị 0/vượt mức tối đa/pause/sau đáo hạn, giảm theo tỷ lệ sau khi rút sớm một phần, và tái gửi sổ đã nạp thêm.
 
