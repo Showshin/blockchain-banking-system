@@ -33,7 +33,7 @@ Nguồn duy nhất là [contracts/config/personal.ts](contracts/config/personal.
 
 | Lớp | Công nghệ | Phiên bản |
 | --- | --- | --- |
-| Runtime | Node.js | 24.22.1 (LTS) |
+| Runtime | Node.js | 22.22.2 (LTS) |
 | Contract | Solidity / Hardhat | 0.8.38 / 3.21.1 |
 | Contract | OpenZeppelin Contracts | 5.6.1 |
 | Kiểm thử | Mocha / Chai / ethers | 12.0.3 / 6.3.0 / 6.17.0 |
@@ -41,7 +41,7 @@ Nguồn duy nhất là [contracts/config/personal.ts](contracts/config/personal.
 | Frontend | TypeScript / Tailwind CSS | 7.0.2 / 4.3.3 |
 | Frontend | ethers / React Router | 6.17.0 / 7.18.5 |
 
-`package.json` ở gốc yêu cầu `engines.node >= 24.22.1`. Hardhat 3 báo lỗi ngay nếu Node cũ hơn.
+`package.json` ở gốc yêu cầu `engines.node >= 22.12`, mức tối thiểu của Vite 8. Bộ kiểm thử và bản build đã chạy trên Node 22.22.2.
 
 ## Cài đặt
 
@@ -205,7 +205,7 @@ Auto-renew yêu cầu `block.timestamp >= maturityAt + gracePeriod`, nên đúng
 
 Sổ đang hoạt động không bị ảnh hưởng. Khi mở sổ, contract đã lưu snapshot APR, kỳ hạn và mức phạt vào chính sổ đó, nên việc sửa hay tắt gói về sau chỉ ảnh hưởng đến các sổ mở mới. `setPlanEnabled` chỉ thay đổi cờ `enabled`. Người có sổ cũ vẫn tất toán, rút sớm toàn bộ hoặc một phần theo mức cũ, hoặc tái gửi sang gói khác đang mở.
 
-Hai ngoại lệ: tái gửi thủ công vào gói đã tắt bị chặn vì `renewDeposit` yêu cầu `newPlan.enabled`; auto-renew vẫn dùng gói gốc vì đó là cam kết với người gửi cũ.
+Hai ngoại lệ: tái gửi thủ công vào gói đã tắt bị chặn vì `renewDeposit` yêu cầu `newPlan.enabled`; auto-renew vẫn dùng gói gốc vì đó là cam kết với người gửi cũ. Nạp thêm vẫn được phép trên gói đã tắt: `topUpDeposit` không mở sổ mới và mọi điều khoản đã snapshot trong sổ, nên việc tắt gói chỉ chặn vốn mới.
 
 ### 7. Một kịch bản tấn công thực tế và cách phòng chống
 
@@ -271,6 +271,8 @@ Ví dụ: sổ 1.000 USDC thuộc gói có mức tối thiểu 500 USDC; rút s�
 Ví dụ: sổ 1.000 USDC kỳ hạn 90 ngày, nạp thêm 500 USDC sau 30 ngày. Khoản 500 USDC mới chỉ sinh lãi cho 60 ngày còn lại. Giới hạn `maxDeposit` của gói gốc vẫn áp dụng trên tổng gốc sau khi nạp thêm.
 
 **Đánh đổi.** Không tách thành các phần riêng: lịch sử nạp thêm được đọc từ sự kiện `DepositToppedUp` và mọi khoản gốc dùng chung một snapshot APR. Không thể nạp thêm sau đáo hạn. Nếu rút sớm sau đó, mức phạt được tính trên toàn bộ gốc còn lại theo snapshot ban đầu.
+
+**Ranh giới.** `maxDeposit` được kiểm tra khi mở sổ và khi nạp thêm, nhưng không kiểm tra lại ở `renewDeposit` và `autoRenewDeposit`. Gốc mới bằng gốc cũ cộng lãi nên luôn cao hơn mức tối thiểu, nhưng có thể vượt `maxDeposit` một chút. Bản này chấp nhận ranh giới đó vì chặn tái gửi sẽ khóa sổ đã đáo hạn; `maxDeposit` được hiểu là giới hạn cho vốn mới.
 
 **Kiểm thử.** Bốn trường hợp: nạp thêm giữa kỳ với lãi theo principal-seconds và reserve tăng đúng, chặn sai chủ/giá trị 0/vượt mức tối đa/pause/sau đáo hạn, giảm theo tỷ lệ sau khi rút sớm một phần, và tái gửi sổ đã nạp thêm.
 

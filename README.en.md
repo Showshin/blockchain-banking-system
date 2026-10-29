@@ -33,7 +33,7 @@ The single source of truth is [contracts/config/personal.ts](contracts/config/pe
 
 | Layer | Technology | Version |
 | --- | --- | --- |
-| Runtime | Node.js | 24.22.1 (LTS) |
+| Runtime | Node.js | 22.22.2 (LTS) |
 | Contracts | Solidity / Hardhat | 0.8.38 / 3.21.1 |
 | Contracts | OpenZeppelin Contracts | 5.6.1 |
 | Testing | Mocha / Chai / ethers | 12.0.3 / 6.3.0 / 6.17.0 |
@@ -41,7 +41,7 @@ The single source of truth is [contracts/config/personal.ts](contracts/config/pe
 | Frontend | TypeScript / Tailwind CSS | 7.0.2 / 4.3.3 |
 | Frontend | ethers / React Router | 6.17.0 / 7.18.5 |
 
-The root `package.json` requires `engines.node >= 24.22.1`. Hardhat 3 fails immediately if Node is older.
+The root `package.json` requires `engines.node >= 22.12`, the Vite 8 minimum. The test suite and the production build both ran on Node 22.22.2.
 
 ## Setup
 
@@ -205,7 +205,7 @@ Auto-renew requires `block.timestamp >= maturityAt + gracePeriod`, so renewal is
 
 Active deposits are unaffected. When a deposit is opened, the contract has already snapshotted the APR, tenor and penalty into that deposit, so editing or disabling the plan later only affects newly opened deposits. `setPlanEnabled` only changes the `enabled` flag. Holders of old deposits can still settle, withdraw early in full or in part at the old rates, or renew into another enabled plan.
 
-Two exceptions: manual renewal into a disabled plan is blocked because `renewDeposit` requires `newPlan.enabled`; auto-renew still uses the original plan because that is the commitment made to the original depositor.
+Two exceptions: manual renewal into a disabled plan is blocked because `renewDeposit` requires `newPlan.enabled`; auto-renew still uses the original plan because that is the commitment made to the original depositor. Top-ups remain allowed on a disabled plan: `topUpDeposit` does not open a new deposit and every term is already snapshotted in the certificate, so disabling a plan only stops new money.
 
 ### 7. A real attack scenario and how it is prevented
 
@@ -271,6 +271,8 @@ Example: a 1,000 USDC deposit in a plan with a 500 USDC minimum; early-withdrawi
 Example: a 1,000 USDC deposit with a 90-day tenor, topped up with 500 USDC after 30 days. The new 500 USDC only earns interest for the remaining 60 days. The original plan's `maxDeposit` limit still applies to the total principal after the top-up.
 
 **Trade-off.** Not split into separate parts: top-up history is read from the `DepositToppedUp` event and all principal shares one APR snapshot. Top-ups are not possible after maturity. If the deposit is early-withdrawn afterwards, the penalty is charged on the entire remaining principal at the original snapshot.
+
+**Boundary.** `maxDeposit` is checked when a deposit is opened and on top-up, but not again in `renewDeposit` or `autoRenewDeposit`. The new principal is the old principal plus interest, so it always stays above the minimum but can exceed `maxDeposit` slightly. This build accepts that boundary because blocking renewal would lock a matured certificate; `maxDeposit` is treated as a limit on new money.
 
 **Tests.** Four cases: mid-term top-up with interest based on principal-seconds and the correct reserve increase, rejection of wrong owner/zero amount/above the maximum/pause/after maturity, proportional reduction after a partial early withdrawal, and renewing a topped-up deposit.
 

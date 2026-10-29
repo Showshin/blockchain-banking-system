@@ -26,7 +26,6 @@ function emptyBankState(): BankState {
     deposits: [],
     wallet: { connected: false, mode: null, address: null, balance: 0, name: null, icon: null },
     vault: { balance: 0 },
-    nextCertificateNo: 1,
   }
 }
 
@@ -98,7 +97,6 @@ export function BankProvider({ children }: { children: ReactNode }) {
           deposits: snapshot.deposits,
           wallet: { ...current.wallet, balance: snapshot.walletBalance },
           vault: { balance: snapshot.vaultBalance },
-          nextCertificateNo: snapshot.nextCertificateNo,
         }
       })
       setChainError(null)

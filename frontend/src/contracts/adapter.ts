@@ -43,7 +43,6 @@ export interface ChainSnapshot {
   deposits: Deposit[]
   walletBalance: number
   vaultBalance: number
-  nextCertificateNo: number
 }
 
 export interface WithdrawReceipt {
@@ -309,7 +308,6 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
     deposits: deposits.sort((a, b) => b.certificateNo - a.certificateNo),
     walletBalance: asNumber(walletBalance),
     vaultBalance: asNumber(vaultBalance),
-    nextCertificateNo: deposits.reduce((max, deposit) => Math.max(max, deposit.certificateNo + 1), 1),
   }
 }
 

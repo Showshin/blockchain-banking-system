@@ -60,7 +60,6 @@ export interface BankState {
   deposits: Deposit[]
   wallet: WalletState
   vault: VaultState
-  nextCertificateNo: number
 }
 
 export interface EthereumProvider {
