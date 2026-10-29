@@ -10,6 +10,7 @@ import { useTheme, type Theme } from '../state/theme'
 import { UiProvider } from '../state/UiProvider'
 import { BrandMark } from './BrandMark'
 import { DepositDialog } from './DepositDialog'
+import { Modal } from './Modal'
 import { WalletDialog } from './WalletDialog'
 
 const navItems = [
@@ -166,12 +167,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </header>
 
           <main className="mx-auto w-full max-w-[1180px] px-4 pb-16 pt-7 sm:px-6 lg:px-10 lg:pb-20 lg:pt-12">
-            <NetworkBanner />
             <div ref={pageRef}>{children}</div>
           </main>
         </div>
       </div>
 
+      <NetworkDialog />
       <WalletDialog open={walletOpen} onClose={closeWallet} />
       <DepositDialog key={depositPlanId ?? 'closed'} planId={depositPlanId} onClose={closeDeposit} />
     </UiProvider>
@@ -218,13 +219,11 @@ function WalletButton({
   )
 }
 
-function NetworkBanner() {
-  const { networkMismatch, chainLoading, refreshChain } = useBank()
+function NetworkDialog() {
+  const { networkMismatch, chainLoading, refreshChain, disconnectWallet } = useBank()
   const { t } = useI18n()
   const [switching, setSwitching] = useState(false)
   const [switchError, setSwitchError] = useState<string | null>(null)
-
-  if (!networkMismatch) return null
 
   const handleSwitch = async () => {
     setSwitching(true)
@@ -240,45 +239,52 @@ function NetworkBanner() {
   }
 
   return (
-    <div role="alert" className="alert-warning mb-5 rounded-[16px] border px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          {chainLoading ? (
-            <span
-              className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border border-current border-t-transparent"
-              aria-hidden="true"
-            />
-          ) : (
-            <WarningCircle size={18} weight="light" className="mt-0.5 shrink-0" />
-          )}
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{t.network.title}</p>
-            <p className="mt-1 text-[11px] leading-relaxed opacity-85">
-              {t.network.description(String(targetChainId()))}
-            </p>
-            {switchError ? <p className="mt-1 text-[11px] font-medium">{switchError}</p> : null}
-          </div>
-        </div>
+    <Modal
+      open={networkMismatch}
+      onClose={() => {}}
+      label={t.network.title}
+      size="sm"
+      closeDisabled
+    >
+      <div className="p-6 text-center sm:p-8">
+        <WarningCircle size={36} weight="light" className="mx-auto text-accent" />
+        <h2 className="mt-5 text-xl font-medium tracking-[-0.03em]">{t.network.title}</h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
+          {t.network.description(String(targetChainId()))}
+        </p>
+        {switchError ? (
+          <p role="alert" className="mx-auto mt-3 max-w-sm text-xs leading-relaxed text-muted">
+            {switchError}
+          </p>
+        ) : null}
         <button
           type="button"
-          className="btn btn-small btn-secondary self-start sm:shrink-0 sm:self-auto"
+          className="btn btn-primary mt-6 w-full"
           onClick={() => void handleSwitch()}
           disabled={switching || chainLoading}
         >
-          {switching ? (
+          {switching || chainLoading ? (
             <>
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+              <span className="h-4 w-4 animate-spin rounded-full border border-on-inverse/40 border-t-on-inverse" />
               {t.network.switching}
             </>
           ) : (
             <>
-              <ArrowClockwise size={14} weight="light" />
+              <ArrowClockwise size={15} weight="light" />
               {t.walletDialog.switchNetwork}
             </>
           )}
         </button>
+        <button
+          type="button"
+          className="mt-3 text-[11px] text-muted underline underline-offset-4 transition hover:text-ink disabled:opacity-50"
+          onClick={disconnectWallet}
+          disabled={switching || chainLoading}
+        >
+          {t.walletDialog.disconnect}
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 

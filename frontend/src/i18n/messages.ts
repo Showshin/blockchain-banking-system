@@ -255,7 +255,7 @@ export const vi = {
     switchNetwork: 'Chuyển sang Sepolia',
     disconnect: 'Ngắt kết nối',
     walletWaiting: 'Đang chờ phê duyệt…',
-    walletDescription: (chainId: number) => 'Ký giao dịch trên chain ID ' + chainId,
+    walletDescription: (network: string) => 'Ký giao dịch trên ' + network,
     retry: 'Tìm lại',
     errorNoWallet: 'Không tìm thấy ví nào trong trình duyệt này.',
     errorNoAccount: 'Ví không trả về địa chỉ.',
@@ -266,7 +266,6 @@ export const vi = {
     errorWrongNetwork: (chainId: string) => 'Hãy chuyển ví sang chain ID ' + chainId + ' rồi thử lại.',
     toastWalletTitle: (name: string) => 'Đã kết nối ' + name,
     toastWalletMessage: 'Mỗi giao dịch sẽ cần bạn xác nhận trong ví.',
-    toastDisconnect: 'Đã ngắt kết nối ví',
   },
   notFound: {
     title: 'Trang này chưa có trong sổ.',
@@ -560,7 +559,7 @@ export const en: Messages = {
     switchNetwork: 'Switch to Sepolia',
     disconnect: 'Disconnect',
     walletWaiting: 'Waiting for approval…',
-    walletDescription: (chainId: number) => 'Sign transactions on chain ID ' + chainId,
+    walletDescription: (network: string) => 'Sign transactions on ' + network,
     retry: 'Search again',
     errorNoWallet: 'No wallet was found in this browser.',
     errorNoAccount: 'The wallet did not return an address.',
@@ -571,7 +570,6 @@ export const en: Messages = {
     errorWrongNetwork: (chainId: string) => 'Switch the wallet to chain ID ' + chainId + ' and try again.',
     toastWalletTitle: (name: string) => name + ' connected',
     toastWalletMessage: 'Each transaction still needs your approval in the wallet.',
-    toastDisconnect: 'Wallet disconnected',
   },
   notFound: {
     title: 'This page is not in the ledger.',

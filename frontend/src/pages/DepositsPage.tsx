@@ -50,7 +50,7 @@ export function DepositsPage() {
         }
       />
 
-      {!networkMismatch ? (
+      {!networkMismatch && !chainLoading ? (
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
           <SummaryCard
             icon={<Wallet size={18} weight="light" />}
@@ -84,16 +84,6 @@ export function DepositsPage() {
         </div>
       ) : null}
 
-      {isChainMode && chainLoading && deposits.length > 0 ? (
-        <div className="mb-5 flex items-center gap-2 text-xs text-muted" role="status">
-          <span
-            className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent"
-            aria-hidden="true"
-          />
-          {t.chain.loading}
-        </div>
-      ) : null}
-
       {isChainMode && chainError && !networkMismatch && !chainLoading ? (
         <div className="alert-danger mb-5 rounded-[16px] border px-4 py-3" role="alert">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -114,7 +104,14 @@ export function DepositsPage() {
         </div>
       ) : null}
 
-      {deposits.length > 0 ? (
+      {isChainMode && chainLoading ? (
+        <div className="panel min-h-[260px] animate-pulse p-6" role="status" aria-live="polite">
+          <span className="sr-only">{t.chain.loading}</span>
+          <div className="h-3 w-28 rounded-full bg-paper-deep" />
+          <div className="mt-7 h-10 w-2/3 rounded-full bg-paper-deep" />
+          <div className="mt-4 h-4 w-1/2 rounded-full bg-paper-deep" />
+        </div>
+      ) : deposits.length > 0 ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {deposits.map((deposit) => (
             <CertificateCard
@@ -128,13 +125,6 @@ export function DepositsPage() {
               onClaim={(selected) => setAction({ depositId: selected.id, mode: 'claim' })}
             />
           ))}
-        </div>
-      ) : isChainMode && chainLoading ? (
-        <div className="panel min-h-[260px] animate-pulse p-6" role="status" aria-live="polite">
-          <span className="sr-only">{t.chain.loading}</span>
-          <div className="h-3 w-28 rounded-full bg-paper-deep" />
-          <div className="mt-7 h-10 w-2/3 rounded-full bg-paper-deep" />
-          <div className="mt-4 h-4 w-1/2 rounded-full bg-paper-deep" />
         </div>
       ) : networkMismatch ? null : (
         <EmptyState

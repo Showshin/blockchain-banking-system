@@ -278,9 +278,7 @@ export function DepositDialog({
                               <span className="ml-2 text-xs font-normal tracking-normal text-on-contrast/65">USDC</span>
                             </p>
                           </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-on-contrast/15 bg-on-contrast/5 text-on-contrast/70">
-                            <SealCheck size={22} weight="light" />
-                          </span>
+                          <SealCheck size={40} weight="light" className="shrink-0 text-on-contrast/70" />
                         </div>
                         <div className="mt-6 grid grid-cols-2 gap-4 border-t border-on-contrast/10 pt-4">
                           <div>

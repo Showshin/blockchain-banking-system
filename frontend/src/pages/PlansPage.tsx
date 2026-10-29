@@ -29,16 +29,6 @@ export function PlansPage() {
         }
       />
 
-      {isChainMode && chainLoading && state.plans.length > 0 ? (
-        <p className="mb-3 flex items-center gap-2 text-[11px] text-muted" role="status">
-          <span
-            className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent"
-            aria-hidden="true"
-          />
-          {t.chain.loading}
-        </p>
-      ) : null}
-
       {!state.wallet.connected ? (
         <EmptyState
           title={t.chain.connectTitle}
@@ -49,7 +39,7 @@ export function PlansPage() {
             </button>
           }
         />
-      ) : isChainMode && chainLoading && state.plans.length === 0 ? (
+      ) : isChainMode && chainLoading ? (
         <div className="panel min-h-[360px] animate-pulse p-6" role="status" aria-live="polite">
           <span className="sr-only">{t.chain.loading}</span>
           <div className="h-3 w-28 rounded-full bg-paper-deep" />

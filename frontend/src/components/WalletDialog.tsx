@@ -9,6 +9,7 @@ import {
 } from '../contracts/wallet'
 import { useI18n } from '../i18n/lang'
 import { formatAddress, formatUsdc } from '../lib/format'
+import { networkName } from '../lib/network'
 import { useBank } from '../state/bank'
 import { useToast } from '../state/toast'
 import { Modal, ModalClose } from './Modal'
@@ -96,6 +97,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   const connectedIcon = state.wallet.icon || ''
   const connectedName = state.wallet.name || copy.unknownWallet
+  const chainId = contractConfig?.chainId ?? 11155111
   const showDiscovery = discovering && wallets.length === 0
 
   return (
@@ -165,7 +167,6 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
               className="btn btn-secondary mt-5 w-full"
               onClick={() => {
                 disconnectWallet()
-                toast({ title: copy.toastDisconnect, tone: 'info' })
               }}
             >
               {copy.disconnect}
@@ -192,6 +193,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
                     key={wallet.uuid}
                     type="button"
                     className="wallet-option"
+                    title={copy.walletDescription(networkName(chainId)) + ' · Chain ID ' + chainId}
                     onClick={() => void connect(wallet)}
                     disabled={busyId !== null}
                   >
@@ -207,7 +209,7 @@ export function WalletDialog({ open, onClose }: { open: boolean; onClose: () => 
                       <span className="mt-0.5 block text-xs text-muted">
                         {busyId === wallet.uuid
                           ? copy.walletWaiting
-                          : copy.walletDescription(contractConfig?.chainId ?? 11155111)}
+                          : copy.walletDescription(networkName(chainId))}
                       </span>
                     </span>
                     <ArrowSquareOut size={17} weight="light" className="text-muted" />
