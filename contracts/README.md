@@ -77,11 +77,11 @@ Deployment công khai hiện tại trên Sepolia:
 
 | Contract | Address |
 | --- | --- |
-| `MockUSDC` | `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc` |
-| `VaultManager` | `0xA128175f2C1099Ecc3933876a3d0BF931816867C` |
-| `SavingCore` | `0xC5Dd267CfefC629E722110F8086c0DDc33a5a302` |
+| `MockUSDC` | `0x460193B776F34D63413d358203516CA44d78ecfE` |
+| `VaultManager` | `0x1c5533537118320021b5795473cb2552d11Bf9B5` |
+| `SavingCore` | `0x10E9eDb55C0cD100F67DEc8b558649e66B263c79` |
 
-Deployer kiêm fee receiver: `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`. Bản này deploy ngày 2026-10-29, block `12018179`–`12018193`, 12 giao dịch setup, gas thực tế `478.354.062.456` wei. Vault giữ `100.000 USDC`; `verify:testnet` xác nhận đủ 5 gói và invariant reserve. Cả ba contract verified trên Etherscan; Sourcify: `MockUSDC` runtime `match`, `VaultManager` và `SavingCore` `exact_match`.
+Deployer kiêm fee receiver: `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`. Bản này deploy ngày 2026-10-30, block `12026923`–`12026936`, 12 giao dịch setup, gas thực tế `2,929,946,052` wei. Vault giữ `100.000 USDC`; `verify:testnet` xác nhận đủ 5 gói và invariant reserve. Cả ba contract verified trên Etherscan; Sourcify: `MockUSDC` runtime `match`, `VaultManager` và `SavingCore` `exact_match`.
 
 ## E2E Sepolia
 
@@ -121,7 +121,7 @@ KEEPER_MODE=watch npm start                 # lặp theo interval
 Lần chạy gần nhất (2026-10-30):
 
 ```text
-89 passing
+104 passing
 Total 100.00% lines / 100.00% statements
 ```
 

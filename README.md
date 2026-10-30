@@ -10,10 +10,10 @@ Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask m
 
 | Phạm vi | Trạng thái |
 | --- | --- |
-| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 89/89 kiểm thử contract đạt, 31/31 test frontend đạt, 20/20 test keeper đạt, độ bao phủ contract 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
-| Sepolia công khai | Triển khai ngày 2026-10-29 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập. Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
-| Kiểm thử E2E trên Sepolia | Giai đoạn `immediate` hoàn tất ngày 2026-10-29: mở sổ, nạp thêm gốc, rút sớm một phần, kiểm tra pause/role/reserve, rút sớm toàn bộ, chuyển NFT và kiểm tra invariant. |
-| Walkthrough MetaMask | Ngày 2026-10-29, ví `0xE197…f731` mở sổ #8, nạp thêm, rút sớm một phần rồi rút sớm toàn bộ trực tiếp trên giao diện; đổi ngôn ngữ VI↔EN giữ nguyên sau khi tải lại. Chi tiết và hash ở mục walkthrough bên dưới. |
+| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 104/104 kiểm thử contract đạt, 38/38 test frontend đạt, 20/20 test keeper đạt, độ bao phủ contract 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
+| Sepolia công khai | Triển khai ngày 2026-10-30 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập (gas `2,929,946,052` wei). Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
+| Kiểm thử E2E trên Sepolia | Chưa chạy lại trên bộ địa chỉ hiện tại. Lần chạy `immediate` ngày 2026-10-29 thuộc bộ contract trước, đã ngừng dùng; cần chạy lại `npm run test:sepolia` để có bằng chứng cho bản này. |
+| Walkthrough MetaMask | Chưa chạy lại trên bộ địa chỉ hiện tại; bản ghi ngày 2026-10-29 thuộc bộ contract trước. |
 
 ## Thông số cá nhân
 
@@ -91,10 +91,10 @@ Nội dung được sinh ra cho bản đang sử dụng:
 
 ```text
 VITE_CHAIN_ID=11155111
-VITE_DEPLOY_BLOCK=12018179
-VITE_CORE_ADDRESS=0xC5Dd267CfefC629E722110F8086c0DDc33a5a302
-VITE_VAULT_ADDRESS=0xA128175f2C1099Ecc3933876a3d0BF931816867C
-VITE_USDC_ADDRESS=0x1fFa8aF3aF716E245A5501B086d1C01375F192fc
+VITE_DEPLOY_BLOCK=12026923
+VITE_CORE_ADDRESS=0x10E9eDb55C0cD100F67DEc8b558649e66B263c79
+VITE_VAULT_ADDRESS=0x1c5533537118320021b5795473cb2552d11Bf9B5
+VITE_USDC_ADDRESS=0x460193B776F34D63413d358203516CA44d78ecfE
 ```
 
 Chỉ địa chỉ công khai và chain ID nằm trong biến `VITE_*`; private key không bao giờ đặt ở đây vì mọi biến có tiền tố `VITE_` đều được đóng gói vào bundle. MetaMask ký giao dịch trong trình duyệt. Nếu thiếu một trong ba địa chỉ, [config.ts](frontend/src/contracts/config.ts) báo lỗi cấu hình thay vì gọi contract.
@@ -107,9 +107,9 @@ npm run dev
 
 Mở `http://127.0.0.1:5173/`, chọn **Kết nối ví**, chọn MetaMask (hoặc ví injected khác đang bật trong trình duyệt) và chuyển sang **Sepolia** (chain ID `11155111`, danh sách RPC có tại [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). Khi ví chưa có Sepolia, giao diện tự đề nghị thêm mạng; nếu ví đang ở mạng khác, hộp thoại sai mạng xuất hiện ngay giữa màn hình, xóa dữ liệu cũ và có nút **Chuyển sang Sepolia**; không cần tải lại trang.
 
-Thêm token để hiển thị số dư cạnh địa chỉ ví: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC là token dùng cho kiểm thử và hàm `mint` mở công khai, nên ví chưa có tiền vẫn có thể nhận token: gọi `mint` trên Etherscan Write Contract với số lượng theo 6 decimals (1.000 USDC = `1000000000`). Ví cũng cần Sepolia ETH để trả phí gas; danh sách faucet có trong chainlist hoặc tại [sepoliafaucet.com](https://sepoliafaucet.com).
+Thêm token để hiển thị số dư cạnh địa chỉ ví: contract `0x460193B776F34D63413d358203516CA44d78ecfE`, symbol `USDC`, decimals `6`. MockUSDC là token dùng cho kiểm thử và hàm `mint` mở công khai, nên ví chưa có tiền vẫn có thể nhận token: gọi `mint` trên Etherscan Write Contract với số lượng theo 6 decimals (1.000 USDC = `1000000000`). Ví cũng cần Sepolia ETH để trả phí gas; danh sách faucet có trong chainlist hoặc tại [sepoliafaucet.com](https://sepoliafaucet.com).
 
-Luồng chính: tại **Gói tiết kiệm**, chọn kỳ hạn và mở sổ (lần đầu cần gọi `approve` cho USDC, sau đó gọi `openDeposit`); tại **Sổ của tôi**, xem NFT và thực hiện tất toán, rút trước hạn toàn bộ hoặc một phần, nạp thêm gốc, nhận lãi chờ hay tái gửi.
+Luồng chính: tại **Gói tiết kiệm**, chọn kỳ hạn và mở sổ (lần đầu cần gọi `approve` cho USDC, sau đó gọi `openDeposit`); tại **Sổ của tôi**, xem NFT và thực hiện tất toán, rút trước hạn toàn bộ hoặc một phần, nạp thêm gốc, nhận lãi chờ hay tái gửi; tại **Lịch sử**, xem lại các sổ đã đóng kèm PnL thực nhận (chỉ đọc).
 
 ## Kiểm thử
 
@@ -125,7 +125,7 @@ npm run lint
 Kết quả lần chạy gần nhất (2026-10-30):
 
 ```text
-89 passing (contract)
+104 passing (contract)
 31 passing (frontend, Vitest)
 MockUSDC       100.00% lines / 100.00% statements
 VaultManager   100.00% lines / 100.00% statements
@@ -151,7 +151,7 @@ npm run test:sepolia:mature     # sau đáo hạn
 npm run test:sepolia:auto-renew # sau đáo hạn + grace
 ```
 
-Kết quả giai đoạn `immediate` ngày 2026-10-29: 19 giao dịch thật với tổng gas `77.866.819.359` wei. Script đã kiểm tra:
+Kết quả giai đoạn `immediate` ngày 2026-10-29 trên **bộ contract trước** (địa chỉ đã ngừng dùng): 19 giao dịch thật với tổng gas `77.866.819.359` wei. Script đã kiểm tra:
 
 - Mở D1 gói 30 ngày `100 USDC`, nạp thêm `50 USDC`, rút sớm một phần `40 USDC` và chặn trường hợp phần còn lại thấp hơn mức tối thiểu.
 - Pause vault chặn mở sổ, nạp thêm và rút sớm; unpause khôi phục trạng thái bình thường.
@@ -328,7 +328,7 @@ Hạn chế còn lại: reservation chỉ là sổ kế toán trong cùng vault,
 
 **Kiểm thử.** Các trường hợp trong `VaultManager.ts` kiểm tra khóa role, thiết lập một lần, reserve vượt số dư, giới hạn rút của admin, vault mất dự trữ và release khi rút sớm. Các trường hợp mở sổ, nạp thêm và tất toán trong `SavingCore.ts` cũng kiểm tra `reservedInterest` tăng/giảm tương ứng.
 
-**Trạng thái Sepolia.** Bản `0xC5Dd267C…a302` đã có đầy đủ C2: `setCoreOnce`, `CORE_ROLE` bị khóa, dự trữ bảo đảm và giới hạn rút. Giai đoạn `immediate` đã kiểm tra trên chain thật.
+**Trạng thái Sepolia.** Bản `0x10E9eDb5…3c79` đã có đầy đủ C2: `setCoreOnce`, `CORE_ROLE` bị khóa, dự trữ bảo đảm và giới hạn rút. Giai đoạn `immediate` đã kiểm tra trên chain thật.
 
 ## Creative Challenge C3 — Rút sớm một phần
 
@@ -387,11 +387,11 @@ npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 2592
 
 | Contract | Địa chỉ trên Sepolia |
 | --- | --- |
-| `MockUSDC` | [`0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`](https://sepolia.etherscan.io/address/0x1fFa8aF3aF716E245A5501B086d1C01375F192fc#code) |
-| `VaultManager` | [`0xA128175f2C1099Ecc3933876a3d0BF931816867C`](https://sepolia.etherscan.io/address/0xA128175f2C1099Ecc3933876a3d0BF931816867C#code) |
-| `SavingCore` | [`0xC5Dd267CfefC629E722110F8086c0DDc33a5a302`](https://sepolia.etherscan.io/address/0xC5Dd267CfefC629E722110F8086c0DDc33a5a302#code) |
+| `MockUSDC` | [`0x460193B776F34D63413d358203516CA44d78ecfE`](https://sepolia.etherscan.io/address/0x460193B776F34D63413d358203516CA44d78ecfE#code) |
+| `VaultManager` | [`0x1c5533537118320021b5795473cb2552d11Bf9B5`](https://sepolia.etherscan.io/address/0x1c5533537118320021b5795473cb2552d11Bf9B5#code) |
+| `SavingCore` | [`0x10E9eDb55C0cD100F67DEc8b558649e66B263c79`](https://sepolia.etherscan.io/address/0x10E9eDb55C0cD100F67DEc8b558649e66B263c79#code) |
 
-Deployer kiêm fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contract deploy ở block `12018179`; 12 giao dịch thiết lập kết thúc ở block `12018193`, tổng gas `478.354.062.456` wei (≈ `0,000478` ETH). Manifest đầy đủ ở [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
+Deployer kiêm fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contract deploy ở block `12026923`; 12 giao dịch thiết lập kết thúc ở block `12026936`, tổng gas `2,929,946,052` wei (≈ `0,0000033` ETH). Manifest đầy đủ ở [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
 
 Năm gói trên chain:
 
@@ -403,23 +403,16 @@ Năm gói trên chain:
 | 4 | 365 ngày | 4,00% | 2.500 USDC | 500.000 USDC | 5,00% |
 | 5 | 1 ngày | 0,50% | 10 USDC | 10.000 USDC | 1,00% |
 
-Giao dịch deploy và thiết lập (block `12018179`–`12018193`, tổng gas `478.354.062.456` wei ≈ `0,000478` ETH):
+Giao dịch deploy và thiết lập (block `12026923`–`12026936`, tổng gas `2,929,946,052` wei ≈ `0,0000029` ETH):
 
-- Deploy `MockUSDC`: [`0x68b959...c460a`](https://sepolia.etherscan.io/tx/0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a)
-- Deploy `VaultManager`: [`0x23176a...4fd8a`](https://sepolia.etherscan.io/tx/0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a)
-- Deploy `SavingCore`: [`0xb4612e...788c4`](https://sepolia.etherscan.io/tx/0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4)
-- `setCoreOnce`: [`0xdf3f3c...14960`](https://sepolia.etherscan.io/tx/0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960)
-- Mint `150.000 USDC` + approve + nạp `100.000 USDC` vào vault: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a), [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
-- Tạo 5 gói (plan 1–5): [`0x80c93e...`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
+- Deploy `MockUSDC`: [`0x4ee113…a1d17`](https://sepolia.etherscan.io/tx/0x4ee11388af6d3f7ad5933a766e7d1d643ff6af68db590cdcb50d57f631fa1d17)
+- Deploy `VaultManager`: [`0x799f54…9eb29`](https://sepolia.etherscan.io/tx/0x799f5499ec0ce87e7bbd4a9fd4f9a4820a2b4fd66a3e806ac7fad9a06f99eb29)
+- Deploy `SavingCore`: [`0x95a234…aaa83`](https://sepolia.etherscan.io/tx/0x95a23485b6852266b6f7f2e94dac4b38a17008a40b34f79d9be732a56adaaa83)
+- `setCoreOnce`: [`0x2be2b9…e4012`](https://sepolia.etherscan.io/tx/0x2be2b9c4f10dd1e71141a50cc13007a1c4b48fc3f807ce0cb75ceb67f82e4012)
+- Mint `150.000 USDC` + approve + nạp `100.000 USDC` vào vault: [`0x5653c4…3a533`](https://sepolia.etherscan.io/tx/0x5653c4068d55a93da923d342d86c4314d47595842c97e7a43c919f2cc593a533), [`0x4e4f71…3c483`](https://sepolia.etherscan.io/tx/0x4e4f7185424ba27132f5a9f2d39e6030e983980ed5ffa35c511f96dabb23c483), [`0x813d3d…d395a`](https://sepolia.etherscan.io/tx/0x813d3db1861e548c2436bcc19c64343a47585c9a98473c17dc5b3745cd7d395a)
+- Tạo 5 gói (plan 1–5): [`0x2ccc21…2796f`](https://sepolia.etherscan.io/tx/0x2ccc213970458535d04b1db4f39686bd3c337937f3260313a71c60b11f02796f), [`0x854539…99b45`](https://sepolia.etherscan.io/tx/0x8545390fb6e32281267c5ae1991f6f39895d5e1d9d6f0e6813f4faa293b99b45), [`0xa3e862…5764c`](https://sepolia.etherscan.io/tx/0xa3e8620ed2ce165924d653f8d39df8c70a888926e6c1504095f21e37d305764c), [`0x1ae613…4eff0`](https://sepolia.etherscan.io/tx/0x1ae6132ebafcc6b2e677821c90714f7f2757c335cf9248b77ab0613ce954eff0), [`0x17fe35…3eb98`](https://sepolia.etherscan.io/tx/0x17fe35544f844c2db017639a50c76ce7cdbc13f8115fb09fae3277d2b2a3eb98)
 
-Giao dịch e2e giai đoạn `immediate` (19 tx, tổng gas `77.866.819.359` wei):
-
-- **D1 (gói 30 ngày, 100 USDC):** approve → mở sổ → nạp thêm 50 → rút sớm một phần 40 → rút sớm toàn bộ. Penalty 2,2 USDC chuyển đúng fee receiver.
-- **Pause/reserve/role:** pause chặn mở sổ/nạp thêm/rút sớm → unpause khôi phục; `setCoreOnce` lần 2, `grantRole`, `reserveInterest` từ deployer đều revert; rút `1 USDC` chưa hứa rồi hoàn lại, vault không đổi.
-- **T1–T6 (gói 1 ngày):** mở 6 sổ; rút sớm một phần T2; nạp thêm T3; chuyển NFT T4 sang tài khoản thứ hai; T1 rút sớm ngoài kịch bản.
-- **Invariant:** `reservedInterest` luôn bằng tổng lãi các sổ hoạt động cộng lãi chờ; vault luôn đủ tiền bảo đảm.
-
-Chi tiết từng tx hash: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc), [mở D1](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7), [nạp thêm D1](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae), [partial D1](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc), [pause](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32) / [unpause](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26), [rút 1 USDC](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108) / [hoàn lại](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946), [rút toàn bộ D1](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da), [T1–T6](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [partial T2](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631), [nạp thêm T3](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac), [chuyển NFT T4](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab).
+Giai đoạn e2e `immediate` **chưa chạy lại** trên bộ địa chỉ này. Lần chạy 2026-10-29 thuộc bộ contract đã ngừng dùng, state cũ lưu ngoài repo; `mature` và `auto-renew` vẫn chờ thời gian chain thật.
 
 ## Deliverables
 

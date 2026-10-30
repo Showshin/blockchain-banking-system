@@ -1,4 +1,4 @@
-import { ArrowClockwise, BookOpen, CaretUp, Check, GearSix, Stack, Wallet, WarningCircle } from '@phosphor-icons/react'
+import { ArrowClockwise, BookOpen, CaretUp, Check, ClockCounterClockwise, GearSix, ShieldCheck, Stack, Wallet, WarningCircle, type Icon } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
@@ -13,10 +13,12 @@ import { DepositDialog } from './DepositDialog'
 import { Modal } from './Modal'
 import { WalletDialog } from './WalletDialog'
 
-const navItems = [
-  { to: '/so-tiet-kiem', icon: BookOpen, label: 'deposits' as const },
-  { to: '/', icon: Stack, end: true, label: 'plans' as const },
-]
+type NavItem = {
+  to: string
+  icon: Icon
+  label: 'deposits' | 'history' | 'plans' | 'admin'
+  end?: boolean
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { state } = useBank()
@@ -30,6 +32,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => (state.plans.find((plan) => plan.popular) ?? state.plans.find((plan) => plan.enabled))?.id ?? null,
     [state.plans],
   )
+
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [
+      { to: '/so-tiet-kiem', icon: BookOpen, label: 'deposits' },
+      { to: '/lich-su', icon: ClockCounterClockwise, label: 'history' },
+      { to: '/', icon: Stack, end: true, label: 'plans' },
+    ]
+    if (state.roles.admin || state.roles.pauser || state.roles.planManager) {
+      items.push({ to: '/quan-tri', icon: ShieldCheck, label: 'admin' })
+    }
+    return items
+  }, [state.roles.admin, state.roles.pauser, state.roles.planManager])
 
   const closeWallet = useCallback(() => setWalletOpen(false), [])
   const closeDeposit = useCallback(() => setDepositPlanId(null), [])

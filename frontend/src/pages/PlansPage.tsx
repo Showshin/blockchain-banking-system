@@ -7,7 +7,10 @@ import { useBank } from '../state/bank'
 import { useUi } from '../state/ui'
 
 export function PlansPage() {
-  const { state, isChainMode, chainLoading, chainError, networkMismatch, refreshChain } = useBank()
+  const { state, isChainMode, chainLoading, chainLoaded, chainError, networkMismatch, refreshChain } =
+    useBank()
+  // Keep the grid on screen when a refresh runs after a transaction.
+  const initialLoading = chainLoading && !chainLoaded
   const { openDeposit, openWallet } = useUi()
   const { t } = useI18n()
 
@@ -39,7 +42,7 @@ export function PlansPage() {
             </button>
           }
         />
-      ) : isChainMode && chainLoading ? (
+      ) : isChainMode && initialLoading ? (
         <div className="panel min-h-[360px] animate-pulse p-6" role="status" aria-live="polite">
           <span className="sr-only">{t.chain.loading}</span>
           <div className="h-3 w-28 rounded-full bg-paper-deep" />

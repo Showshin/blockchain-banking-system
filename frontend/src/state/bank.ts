@@ -30,6 +30,8 @@ export interface BankContextValue {
   state: BankState
   isChainMode: boolean
   chainLoading: boolean
+  /** True once a snapshot has loaded for the connected wallet. */
+  chainLoaded: boolean
   chainError: string | null
   networkMismatch: boolean
   openDeposit: (planId: string, amount: number) => Promise<Deposit>

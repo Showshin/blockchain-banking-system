@@ -8,11 +8,10 @@ import {
 } from 'ethers'
 import { messages } from '../i18n/messages'
 import type { Deposit, DepositStatus, SavingPlan } from '../types'
-import { MockUSDCAbi, SavingCoreAbi } from './abis'
+import { MockUSDCAbi, SavingCoreAbi, VaultManagerAbi } from './abis'
 import { contractConfig, type ContractConfig } from './config'
 import { providerFor } from './wallet'
 
-const ACTIVE = 1n
 const WITHDRAWN = 2n
 const MANUAL_RENEWED = 3n
 const AUTO_RENEWED = 4n
@@ -43,6 +42,12 @@ export interface ChainSnapshot {
   deposits: Deposit[]
   walletBalance: number
   vaultBalance: number
+  coreBalance: number
+  vaultReserved: number
+  vaultPaused: boolean
+  vaultCore: string | null
+  vaultFeeReceiver: string | null
+  roles: { admin: boolean; pauser: boolean; planManager: boolean }
 }
 
 export interface WithdrawReceipt {
@@ -80,6 +85,7 @@ async function readContracts() {
     provider,
     usdc: new Contract(config.usdcAddress, MockUSDCAbi, provider),
     core: new Contract(config.coreAddress, SavingCoreAbi, provider),
+    vault: new Contract(config.vaultAddress, VaultManagerAbi, provider),
   }
 }
 
@@ -91,7 +97,17 @@ async function writeContracts(address: string) {
     provider,
     usdc: new Contract(config.usdcAddress, MockUSDCAbi, signer),
     core: new Contract(config.coreAddress, SavingCoreAbi, signer),
+    vault: new Contract(config.vaultAddress, VaultManagerAbi, signer),
   }
+}
+
+// ethers v6 exposes event arguments through a proxy, so `field in args` is
+// always false. Read the value instead.
+function argsOf(log: unknown, field: string): Record<string, bigint | boolean> | null {
+  if (!log || typeof log !== 'object') return null
+  const args = (log as { args?: Record<string, bigint | boolean> }).args
+  if (!args || args[field] === undefined) return null
+  return args
 }
 
 function asNumber(value: bigint): number {
@@ -148,6 +164,7 @@ function toDeposit(
   owner: string,
   interestAtMaturity: bigint,
   pendingInterest: bigint,
+  withdrawal?: { interest: bigint; isEarly: boolean },
 ): Deposit {
   return {
     id: `chain-${id}`,
@@ -163,6 +180,8 @@ function toDeposit(
     owner,
     interestAtMaturity: asNumber(interestAtMaturity),
     pendingInterest: asNumber(pendingInterest),
+    realizedInterest: withdrawal ? asNumber(withdrawal.interest) : undefined,
+    withdrawnEarly: withdrawal?.isEarly,
   }
 }
 
@@ -255,7 +274,7 @@ export async function assertConfiguredNetwork(): Promise<void> {
 export async function loadChainSnapshot(address: string): Promise<ChainSnapshot> {
   await assertConfiguredNetwork()
   const config = requireConfig()
-  const { usdc, core } = await readContracts()
+  const { usdc, core, vault } = await readContracts()
   const nextPlanId = Number(await core.nextPlanId())
   const planEntries = await Promise.all(
     Array.from({ length: Math.max(0, nextPlanId - 1) }, async (_, index) => {
@@ -269,6 +288,27 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
     config.deploymentBlock,
     'latest',
   )
+  // The deposit struct does not record how a position was closed, so the
+  // Withdrawn event is the only source for early-vs-maturity and the interest
+  // that was actually paid.
+  const settled = await core.queryFilter(
+    core.filters.Withdrawn(),
+    config.deploymentBlock,
+    'latest',
+  )
+  const withdrawals = new Map<string, { interest: bigint; isEarly: boolean }>()
+  for (const log of settled) {
+    if (!('args' in log)) continue
+    const args = log.args as unknown as {
+      depositId: bigint
+      interest: bigint
+      isEarly: boolean
+    }
+    withdrawals.set(args.depositId.toString(), {
+      interest: args.interest,
+      isEarly: args.isEarly,
+    })
+  }
   const ids = [
     ...new Set(
       opened.map((event) =>
@@ -281,26 +321,47 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
   const deposits = (
     await Promise.all(
       ids.map(async (id) => {
-        const [source, owner, interest, pending] = await Promise.all([
+        // A burned certificate has no owner, so ownerOf reverts. Skip it rather
+        // than failing the whole snapshot.
+        let owner: string
+        try {
+          owner = (await core.ownerOf(id)) as string
+        } catch {
+          return null
+        }
+        if (owner.toLowerCase() !== address.toLowerCase()) return null
+
+        const [source, interest, pending] = await Promise.all([
           readDepositSource(core, id),
-          core.ownerOf(id) as Promise<string>,
           core.interestAtMaturity(id) as Promise<bigint>,
           core.pendingInterest(id) as Promise<bigint>,
         ])
-        // A deferred-interest certificate stays visible until its interest is
-        // claimed; after that the position is fully closed.
-        const visible =
-          source.status === ACTIVE ||
-          (source.status === PRINCIPAL_WITHDRAWN && pending > 0n)
-        if (!visible || owner.toLowerCase() !== address.toLowerCase()) return null
-        return toDeposit(id, source, owner, interest, pending)
+        // Settled certificates stay in the snapshot so the history page can
+        // record them. The deposits page filters for open positions only.
+        return toDeposit(id, source, owner, interest, pending, withdrawals.get(id.toString()))
       }),
     )
   ).filter((deposit): deposit is Deposit => deposit !== null)
 
-  const [walletBalance, vaultBalance] = await Promise.all([
-    usdc.balanceOf(address) as Promise<bigint>,
-    usdc.balanceOf(config.vaultAddress) as Promise<bigint>,
+  const [walletBalance, vaultBalance, coreBalance, reserved, paused, vaultCore, feeReceiver] =
+    await Promise.all([
+      usdc.balanceOf(address) as Promise<bigint>,
+      usdc.balanceOf(config.vaultAddress) as Promise<bigint>,
+      usdc.balanceOf(config.coreAddress) as Promise<bigint>,
+      vault.reservedInterest() as Promise<bigint>,
+      vault.paused() as Promise<boolean>,
+      vault.core() as Promise<string>,
+      vault.feeReceiver() as Promise<string>,
+    ])
+  const [adminRole, pauserRole, planManagerRole] = await Promise.all([
+    core.DEFAULT_ADMIN_ROLE() as Promise<string>,
+    vault.PAUSER_ROLE() as Promise<string>,
+    core.PLAN_MANAGER_ROLE() as Promise<string>,
+  ])
+  const [isAdmin, isPauser, isPlanManager] = await Promise.all([
+    core.hasRole(adminRole, address) as Promise<boolean>,
+    vault.hasRole(pauserRole, address) as Promise<boolean>,
+    core.hasRole(planManagerRole, address) as Promise<boolean>,
   ])
 
   return {
@@ -308,6 +369,13 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
     deposits: deposits.sort((a, b) => b.certificateNo - a.certificateNo),
     walletBalance: asNumber(walletBalance),
     vaultBalance: asNumber(vaultBalance),
+    coreBalance: asNumber(coreBalance),
+    vaultReserved: asNumber(reserved),
+    vaultPaused: paused,
+    vaultCore: vaultCore === '0x0000000000000000000000000000000000000000' ? null : vaultCore,
+    vaultFeeReceiver:
+      feeReceiver === '0x0000000000000000000000000000000000000000' ? null : feeReceiver,
+    roles: { admin: isAdmin, pauser: isPauser, planManager: isPlanManager },
   }
 }
 
@@ -444,4 +512,160 @@ export async function claimChainInterest(
   const args = eventArgs(core, receipt, 'InterestClaimed')
   if (!args) throw new Error('The interest claim event was not found in the transaction receipt.')
   return { interest: asNumber(args.amount as bigint) }
+}
+
+/** Admin operations. Every call reverts on chain unless the signer holds the role. */
+export async function setVaultPaused(address: string, paused: boolean): Promise<string> {
+  const { vault } = await writeContracts(address)
+  const receipt = (await (await (paused ? vault.pause() : vault.unpause())).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export async function fundChainVault(address: string, amount: number): Promise<string> {
+  const { usdc, vault } = await writeContracts(address)
+  const units = parseUnits(amount.toFixed(6), 6)
+  const allowance = (await usdc.allowance(address, contractConfig?.vaultAddress)) as bigint
+  if (allowance < units) {
+    await (await usdc.approve(contractConfig?.vaultAddress, MaxUint256)).wait()
+  }
+  const receipt = (await (await vault.fundVault(units)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export async function withdrawChainVault(address: string, amount: number): Promise<string> {
+  const { vault } = await writeContracts(address)
+  const units = parseUnits(amount.toFixed(6), 6)
+  const receipt = (await (await vault.withdrawVault(units)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export async function setChainPlanEnabled(
+  address: string,
+  planId: string,
+  enabled: boolean,
+): Promise<string> {
+  const { core } = await writeContracts(address)
+  const receipt = (await (await core.setPlanEnabled(chainPlanId(planId), enabled)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export type TimelineKind =
+  | 'opened'
+  | 'topped-up'
+  | 'partial'
+  | 'settled'
+  | 'early'
+  | 'renewed'
+  | 'deferred'
+  | 'claimed'
+
+export interface TimelineEntry {
+  kind: TimelineKind
+  at: number
+  blockNumber: number
+  amount?: number
+  interest?: number
+  penalty?: number
+  newPrincipal?: number
+  newDepositId?: number
+  remainingPrincipal?: number
+}
+
+/** Every event that touched one certificate, oldest first. */
+export async function loadDepositTimeline(depositId: string): Promise<TimelineEntry[]> {
+  const config = requireConfig()
+  const { core, provider } = await readContracts()
+  const id = BigInt(depositId.replace('chain-', ''))
+  const from = config.deploymentBlock
+
+  // Indexed topic filters behave differently across wallet RPCs, so read every
+  // event in the deployment range and keep the ones that belong to this id.
+  const [opened, topped, partial, withdrawn, renewed, deferred, claimed] = await Promise.all([
+    core.queryFilter(core.filters.DepositOpened(), from, 'latest'),
+    core.queryFilter(core.filters.DepositToppedUp(), from, 'latest'),
+    core.queryFilter(core.filters.PartialEarlyWithdrawn(), from, 'latest'),
+    core.queryFilter(core.filters.Withdrawn(), from, 'latest'),
+    core.queryFilter(core.filters.Renewed(), from, 'latest'),
+    core.queryFilter(core.filters.InterestDeferred(), from, 'latest'),
+    core.queryFilter(core.filters.InterestClaimed(), from, 'latest'),
+  ])
+  const mine = (log: unknown, field = 'depositId') => {
+    const args = argsOf(log, field)
+    return args && args[field] === id ? args : null
+  }
+
+  const entries: TimelineEntry[] = []
+  const add = (log: { blockNumber: number }, entry: Omit<TimelineEntry, 'blockNumber'>) =>
+    entries.push({ ...entry, blockNumber: log.blockNumber })
+
+  for (const log of opened) {
+    const args = mine(log)
+    if (args) add(log, { kind: 'opened', at: 0, amount: asNumber(args.principal as bigint) })
+  }
+  for (const log of topped) {
+    const args = mine(log)
+    if (args) {
+      add(log, {
+        kind: 'topped-up',
+        at: 0,
+        amount: asNumber(args.amount as bigint),
+        newPrincipal: asNumber(args.newPrincipal as bigint),
+        interest: asNumber(args.interestAdded as bigint),
+      })
+    }
+  }
+  for (const log of partial) {
+    const args = mine(log)
+    if (args) {
+      add(log, {
+        kind: 'partial',
+        at: 0,
+        amount: asNumber(args.amount as bigint),
+        penalty: asNumber(args.penalty as bigint),
+        remainingPrincipal: asNumber(args.remainingPrincipal as bigint),
+      })
+    }
+  }
+  for (const log of withdrawn) {
+    const args = mine(log)
+    if (args) {
+      add(log, {
+        kind: args.isEarly ? 'early' : 'settled',
+        at: 0,
+        amount: asNumber(args.principal as bigint),
+        interest: asNumber(args.interest as bigint),
+      })
+    }
+  }
+  for (const log of renewed) {
+    const args = mine(log, 'oldDepositId')
+    if (args) {
+      add(log, {
+        kind: 'renewed',
+        at: 0,
+        newDepositId: Number(args.newDepositId as bigint),
+        newPrincipal: asNumber(args.newPrincipal as bigint),
+      })
+    }
+  }
+  for (const log of deferred) {
+    const args = mine(log)
+    if (args) add(log, { kind: 'deferred', at: 0, amount: asNumber(args.amount as bigint) })
+  }
+  for (const log of claimed) {
+    const args = mine(log)
+    if (args) add(log, { kind: 'claimed', at: 0, amount: asNumber(args.amount as bigint) })
+  }
+
+  entries.sort((a, b) => a.blockNumber - b.blockNumber)
+
+  const blocks = new Map<number, number>()
+  await Promise.all(
+    [...new Set(entries.map((entry) => entry.blockNumber))].map(async (blockNumber) => {
+      const block = await provider.getBlock(blockNumber)
+      blocks.set(blockNumber, (block?.timestamp ?? 0) * 1_000)
+    }),
+  )
+
+  return entries.map((entry) => ({ ...entry, at: blocks.get(entry.blockNumber) ?? 0 }))
 }

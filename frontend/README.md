@@ -24,11 +24,11 @@ Frontend chỉ hỗ trợ deployment Sepolia hiện tại:
 
 | Contract | Address |
 | --- | --- |
-| `MockUSDC` | `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc` |
-| `VaultManager` | `0xA128175f2C1099Ecc3933876a3d0BF931816867C` |
-| `SavingCore` | `0xC5Dd267CfefC629E722110F8086c0DDc33a5a302` |
+| `MockUSDC` | `0x460193B776F34D63413d358203516CA44d78ecfE` |
+| `VaultManager` | `0x1c5533537118320021b5795473cb2552d11Bf9B5` |
+| `SavingCore` | `0x10E9eDb55C0cD100F67DEc8b558649e66B263c79` |
 
-Chain ID `11155111`, deploy block `12018179`. Bản này gồm đủ C1–C4; adapter bật nút **Nạp thêm**/**Nhận lãi** theo dữ liệu chain.
+Chain ID `11155111`, deploy block `12026923`. Bản này gồm đủ C1–C4; adapter bật nút **Nạp thêm**/**Nhận lãi** theo dữ liệu chain.
 
 Sao chép `.env.example` thành `.env.local`, hoặc để script deployment ở thư mục contracts ghi file này:
 

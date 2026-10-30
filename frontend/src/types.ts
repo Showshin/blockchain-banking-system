@@ -39,6 +39,10 @@ export interface Deposit {
   owner: string
   interestAtMaturity: number
   pendingInterest: number
+  /** Interest actually paid by the Withdrawn event, when the deposit was settled. */
+  realizedInterest?: number
+  /** True when the Withdrawn event reports an early withdrawal. */
+  withdrawnEarly?: boolean
   parentId?: string
 }
 
@@ -53,6 +57,18 @@ export interface WalletState {
 
 export interface VaultState {
   balance: number
+  /** Interest promised to open deposits; the admin cannot withdraw this. */
+  reserved: number
+  paused: boolean
+  core: string | null
+  feeReceiver: string | null
+}
+
+/** Roles held by the connected wallet, read from both contracts. */
+export interface RoleState {
+  admin: boolean
+  pauser: boolean
+  planManager: boolean
 }
 
 export interface BankState {
@@ -60,6 +76,9 @@ export interface BankState {
   deposits: Deposit[]
   wallet: WalletState
   vault: VaultState
+  /** USDC held by SavingCore, i.e. the principal of open deposits. */
+  coreBalance: number
+  roles: RoleState
 }
 
 export interface EthereumProvider {

@@ -13,6 +13,28 @@ describe('formatUsdc', () => {
     expect(formatUsdc(10_000, true)).toBe('10K')
     expect(formatUsdc(9_999, true)).toBe('9,999.00')
   })
+
+  it('keeps sub-cent interest visible instead of rounding it to zero', () => {
+    expect(formatUsdc(0.000274)).toBe('0.000274')
+    expect(formatUsdc(0.00822)).toBe('0.00822')
+    expect(formatUsdc(0.0055)).toBe('0.0055')
+    expect(formatUsdc(-0.000274)).toBe('-0.000274')
+    expect(formatUsdc(0.01)).toBe('0.01')
+    expect(formatUsdc(0.009999)).toBe('0.009999')
+  })
+
+  it('shows sub-cent fractions on amounts above one cent when precise is asked', () => {
+    expect(formatUsdc(10.000137, false, true)).toBe('10.000137')
+    expect(formatUsdc(10.000137)).toBe('10.00')
+    expect(formatUsdc(1_234.5, false, true)).toBe('1,234.50')
+    expect(formatUsdc(10, false, true)).toBe('10.00')
+  })
+
+  it('keeps the interest on a 1,000 USDC one-day deposit readable', () => {
+    // 1,000 USDC at 0.50% APR for one day, as the contract computes it.
+    expect(formatUsdc(0.013698, false, true)).toBe('0.013698')
+    expect(formatUsdc(0.013698)).toBe('0.01')
+  })
 })
 
 describe('formatBps', () => {

@@ -6,13 +6,20 @@ import {
   interestFor,
   isClaimable,
   isMatured,
+  isSettled,
   maturityFor,
   penaltyFor,
   remainingSeconds,
   roundUsdc,
+  settledKind,
+  settledPnl,
+  settlementKind,
   topUpInterestFor,
   totalActivePrincipal,
   totalOutstandingInterest,
+  totalSettledInterest,
+  totalSettledPnl,
+  totalSettledPrincipal,
 } from './bank'
 
 const OPENED_AT = '2026-01-01T00:00:00.000Z'
@@ -89,6 +96,87 @@ describe('deposit state', () => {
     expect(isClaimable(deposit({ status: 'principal-withdrawn', pendingInterest: 2 }))).toBe(true)
     expect(isClaimable(deposit({ status: 'principal-withdrawn', pendingInterest: 0 }))).toBe(false)
     expect(isClaimable(deposit({ status: 'active', pendingInterest: 2 }))).toBe(false)
+  })
+
+  it('separates settled certificates from open positions', () => {
+    expect(isSettled(deposit({ status: 'withdrawn' }))).toBe(true)
+    expect(isSettled(deposit({ status: 'manual-renewed' }))).toBe(true)
+    expect(isSettled(deposit({ status: 'auto-renewed' }))).toBe(true)
+    expect(isSettled(deposit({ status: 'principal-withdrawn', pendingInterest: 0 }))).toBe(true)
+    expect(isSettled(deposit({ status: 'principal-withdrawn', pendingInterest: 2 }))).toBe(false)
+    expect(isSettled(deposit({ status: 'active' }))).toBe(false)
+
+    expect(settledKind(deposit({ status: 'withdrawn' }))).toBe('settled')
+    expect(settledKind(deposit({ status: 'manual-renewed' }))).toBe('renewed')
+    expect(settledKind(deposit({ status: 'auto-renewed' }))).toBe('renewed')
+    expect(settledKind(deposit({ status: 'principal-withdrawn', pendingInterest: 0 }))).toBe(
+      'claimed',
+    )
+    expect(settledKind(deposit({ status: 'active' }))).toBeNull()
+  })
+
+  it('sums settled principal and certificate interest', () => {
+    const values = [
+      deposit({ principal: 1_000, interestAtMaturity: 5.5 }),
+      deposit({
+        principal: 500,
+        interestAtMaturity: 2,
+        status: 'principal-withdrawn',
+        pendingInterest: 0,
+      }),
+      deposit({ principal: 300, interestAtMaturity: 3, status: 'withdrawn' }),
+      deposit({ principal: 200, interestAtMaturity: 1, status: 'manual-renewed' }),
+    ]
+    expect(totalSettledPrincipal(values)).toBe(1_000)
+    expect(totalSettledInterest(values)).toBe(6)
+  })
+
+  it('reports the realised result of a closed certificate', () => {
+    expect(settledPnl(deposit({ status: 'withdrawn', realizedInterest: 5.55 }))).toBe(5.55)
+    expect(
+      settledPnl(
+        deposit({
+          status: 'withdrawn',
+          withdrawnEarly: true,
+          realizedInterest: 0,
+          penaltyBpsAtOpen: 400,
+        }),
+      ),
+    ).toBe(-40)
+    expect(settledPnl(deposit({ status: 'manual-renewed', interestAtMaturity: 3 }))).toBe(3)
+    expect(
+      settledPnl(
+        deposit({ status: 'principal-withdrawn', pendingInterest: 0, interestAtMaturity: 2 }),
+      ),
+    ).toBe(2)
+    expect(settledPnl(deposit({ status: 'active' }))).toBeNull()
+    expect(
+      settledPnl(deposit({ status: 'principal-withdrawn', pendingInterest: 1 })),
+    ).toBeNull()
+  })
+
+  it('names how a certificate was closed', () => {
+    expect(settlementKind(deposit({ status: 'withdrawn' }))).toBe('matured')
+    expect(settlementKind(deposit({ status: 'withdrawn', withdrawnEarly: true }))).toBe('early')
+    expect(settlementKind(deposit({ status: 'auto-renewed' }))).toBe('renewed')
+    expect(settlementKind(deposit({ status: 'principal-withdrawn', pendingInterest: 0 }))).toBe(
+      'claimed',
+    )
+    expect(settlementKind(deposit({ status: 'active' }))).toBeNull()
+  })
+
+  it('sums realised PnL across closed certificates only', () => {
+    const values = [
+      deposit({ status: 'withdrawn', realizedInterest: 5.55 }),
+      deposit({
+        status: 'withdrawn',
+        withdrawnEarly: true,
+        realizedInterest: 0,
+        penaltyBpsAtOpen: 400,
+      }),
+      deposit({ status: 'active' }),
+    ]
+    expect(totalSettledPnl(values)).toBe(-34.45)
   })
 
   it('sums only active principal and outstanding interest', () => {

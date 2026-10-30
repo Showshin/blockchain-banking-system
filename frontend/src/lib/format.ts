@@ -5,6 +5,20 @@ const usdcFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 })
 
+/**
+ * Sub-cent amounts would collapse to "0.00" with two decimals, which reads as
+ * zero interest. USDC has six decimals on chain, so keep them visible.
+ */
+const microUsdcFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+})
+
+/** Rounds to cents so a value like 10.000137 is recognised as "has fractions". */
+function hasSubCentFraction(value: number): boolean {
+  return Math.abs(value - Math.round(value * 100) / 100) > 1e-9
+}
+
 const compactFormatter = new Intl.NumberFormat('en-US', {
   notation: 'compact',
   maximumFractionDigits: 1,
@@ -40,8 +54,10 @@ const dateTimeFormatters: Record<Lang, Intl.DateTimeFormat> = {
   }),
 }
 
-export function formatUsdc(value: number, compact = false): string {
+export function formatUsdc(value: number, compact = false, precise = false): string {
   if (compact && Math.abs(value) >= 10_000) return compactFormatter.format(value)
+  if (value !== 0 && Math.abs(value) < 0.01) return microUsdcFormatter.format(value)
+  if (precise && hasSubCentFraction(value)) return microUsdcFormatter.format(value)
   return usdcFormatter.format(value)
 }
 

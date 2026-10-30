@@ -68,12 +68,12 @@ export function CertificateCard({
               {claimable ? copy.principalReturned : copy.principal}
             </p>
             <p className="mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-medium leading-none tracking-[-0.06em] tabular-nums">
-              {formatUsdc(deposit.principal)}
+              {formatUsdc(deposit.principal, false, true)}
               <span className="ml-2 text-[11px] font-normal tracking-normal text-muted">USDC</span>
             </p>
             <p className="certificate-interest mt-2 text-xs text-muted">
               {claimable ? copy.pendingInterest : copy.expectedInterest}{' '}
-              <span className="font-medium text-accent">+{formatUsdc(interest)} USDC</span>
+              <span className="font-medium text-accent">+{formatUsdc(interest, false, true)} USDC</span>
             </p>
           </div>
           <CertificateSeal tier={tier} />

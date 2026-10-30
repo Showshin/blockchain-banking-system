@@ -1,9 +1,10 @@
 import { ArrowClockwise, ArrowRight, Clock, SealCheck, Wallet, WarningCircle } from '@phosphor-icons/react'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { ActionDialog, type ActionMode } from '../components/ActionDialog'
 import { CertificateCard } from '../components/CertificateCard'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { SummaryCard } from '../components/SummaryCard'
 import { useNow } from '../hooks/useNow'
 import { useI18n } from '../i18n/lang'
 import { isMatured, totalActivePrincipal, totalOutstandingInterest } from '../lib/bank'
@@ -15,7 +16,10 @@ import { useUi } from '../state/ui'
 type ActionState = { depositId: string; mode: ActionMode } | null
 
 export function DepositsPage() {
-  const { state, isChainMode, chainLoading, chainError, networkMismatch, refreshChain } = useBank()
+  const { state, isChainMode, chainLoading, chainLoaded, chainError, networkMismatch, refreshChain } =
+    useBank()
+  // Only the first load blanks the page; a refresh after a transaction keeps the data on screen.
+  const initialLoading = chainLoading && !chainLoaded
   const { openDeposit, openWallet } = useUi()
   const { t, lang } = useI18n()
   const [action, setAction] = useState<ActionState>(null)
@@ -24,7 +28,8 @@ export function DepositsPage() {
   const deposits = state.deposits
     .filter(
       (deposit) =>
-        deposit.status === 'active' || deposit.status === 'principal-withdrawn',
+        deposit.status === 'active' ||
+        (deposit.status === 'principal-withdrawn' && deposit.pendingInterest > 0),
     )
     .sort((a, b) => b.certificateNo - a.certificateNo)
   const nextMaturity = state.deposits
@@ -50,7 +55,7 @@ export function DepositsPage() {
         }
       />
 
-      {!networkMismatch && !chainLoading ? (
+      {!networkMismatch && !initialLoading ? (
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
           <SummaryCard
             icon={<Wallet size={18} weight="light" />}
@@ -104,7 +109,7 @@ export function DepositsPage() {
         </div>
       ) : null}
 
-      {isChainMode && chainLoading ? (
+      {isChainMode && initialLoading ? (
         <div className="panel min-h-[260px] animate-pulse p-6" role="status" aria-live="polite">
           <span className="sr-only">{t.chain.loading}</span>
           <div className="h-3 w-28 rounded-full bg-paper-deep" />
@@ -147,28 +152,5 @@ export function DepositsPage() {
         onClose={() => setAction(null)}
       />
     </>
-  )
-}
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  detail?: string
-}) {
-  return (
-    <div className="rounded-[20px] border border-line bg-surface px-4 py-4">
-      <div className="flex items-center gap-2 text-muted">
-        <span className="text-accent">{icon}</span>
-        <span className="text-[10px] uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <p className="mt-2 text-lg font-medium tracking-[-0.03em] tabular-nums">{value}</p>
-      {detail ? <p className="mt-1 text-[10px] text-muted">{detail}</p> : null}
-    </div>
   )
 }

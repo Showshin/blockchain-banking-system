@@ -54,6 +54,68 @@ export function isClaimable(deposit: Deposit): boolean {
   return deposit.status === 'principal-withdrawn' && deposit.pendingInterest > 0
 }
 
+export type SettledKind = 'settled' | 'renewed' | 'claimed'
+
+/**
+ * A position is closed once the principal is settled and no interest is left
+ * to claim: withdrawn (at maturity or early), renewed into a new certificate,
+ * or principal returned with the deferred interest already claimed.
+ */
+export function isSettled(deposit: Deposit): boolean {
+  return settledKind(deposit) !== null
+}
+
+export function settledKind(deposit: Deposit): SettledKind | null {
+  if (deposit.status === 'withdrawn') return 'settled'
+  if (deposit.status === 'manual-renewed' || deposit.status === 'auto-renewed') return 'renewed'
+  if (deposit.status === 'principal-withdrawn' && deposit.pendingInterest === 0) return 'claimed'
+  return null
+}
+
+export function totalSettledPrincipal(deposits: Deposit[]): number {
+  return deposits
+    .filter((deposit) => isSettled(deposit))
+    .reduce((total, deposit) => total + deposit.principal, 0)
+}
+
+/** Interest the closed certificates accrued at their maturity date. */
+export function totalSettledInterest(deposits: Deposit[]): number {
+  return deposits
+    .filter((deposit) => isSettled(deposit))
+    .reduce((total, deposit) => total + deposit.interestAtMaturity, 0)
+}
+
+export type SettlementKind = 'early' | 'matured' | 'renewed' | 'claimed'
+
+/** How a closed position ended; drives the PnL caption. */
+export function settlementKind(deposit: Deposit): SettlementKind | null {
+  const kind = settledKind(deposit)
+  if (kind === null) return null
+  if (kind === 'settled') return deposit.withdrawnEarly ? 'early' : 'matured'
+  return kind === 'renewed' ? 'renewed' : 'claimed'
+}
+
+/**
+ * Realised result of a closed certificate: interest actually received minus any
+ * early-withdrawal penalty. Positive means the payout beat the principal,
+ * negative means the penalty ate into it.
+ */
+export function settledPnl(deposit: Deposit): number | null {
+  if (!isSettled(deposit)) return null
+  if (deposit.status === 'withdrawn') {
+    const interest = deposit.realizedInterest ?? deposit.interestAtMaturity
+    const penalty = deposit.withdrawnEarly
+      ? penaltyFor(deposit.principal, deposit.penaltyBpsAtOpen)
+      : 0
+    return roundUsdc(interest - penalty)
+  }
+  return roundUsdc(deposit.interestAtMaturity)
+}
+
+export function totalSettledPnl(deposits: Deposit[]): number {
+  return roundUsdc(deposits.reduce((total, deposit) => total + (settledPnl(deposit) ?? 0), 0))
+}
+
 export function totalOutstandingInterest(deposits: Deposit[]): number {
   return deposits.reduce((total, deposit) => {
     if (deposit.status === 'active') return total + interestEarned(deposit)

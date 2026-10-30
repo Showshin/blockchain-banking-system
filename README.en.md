@@ -10,10 +10,10 @@ The React + TypeScript interface connects to injected wallets through EIP-6963 (
 
 | Area | Status |
 | --- | --- |
-| Source and tests | C1–C4 fully implemented. 89/89 contract tests pass, 31/31 frontend tests pass, 20/20 keeper tests pass, 100% contract line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
-| Public Sepolia | Deployed on 2026-10-29 with 5 plans, a `100,000 USDC` vault and 12 setup transactions. All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
-| Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. |
-| MetaMask walkthrough | On 2026-10-29 wallet `0xE197…f731` opened deposit #8, topped it up, made a partial early withdrawal and then a full early withdrawal directly in the interface; switching VI↔EN survives a reload. Details and hashes are in the walkthrough section below. |
+| Source and tests | C1–C4 fully implemented. 104/104 contract tests pass, 38/38 frontend tests pass, 20/20 keeper tests pass, 100% contract line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
+| Public Sepolia | Deployed on 2026-10-30 with 5 plans, a `100,000 USDC` vault and 12 setup transactions (`2,929,946,052` wei of gas). All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
+| Sepolia E2E | Not re-run on the current address set. The 2026-10-29 `immediate` run belongs to the retired deployment; `npm run test:sepolia` must be run again to produce evidence for this build. |
+| MetaMask walkthrough | Not re-run on the current address set; the 2026-10-29 record belongs to the retired deployment. |
 
 ## Personal parameters
 
@@ -91,10 +91,10 @@ Content generated for the current deployment:
 
 ```text
 VITE_CHAIN_ID=11155111
-VITE_DEPLOY_BLOCK=12018179
-VITE_CORE_ADDRESS=0xC5Dd267CfefC629E722110F8086c0DDc33a5a302
-VITE_VAULT_ADDRESS=0xA128175f2C1099Ecc3933876a3d0BF931816867C
-VITE_USDC_ADDRESS=0x1fFa8aF3aF716E245A5501B086d1C01375F192fc
+VITE_DEPLOY_BLOCK=12026923
+VITE_CORE_ADDRESS=0x10E9eDb55C0cD100F67DEc8b558649e66B263c79
+VITE_VAULT_ADDRESS=0x1c5533537118320021b5795473cb2552d11Bf9B5
+VITE_USDC_ADDRESS=0x460193B776F34D63413d358203516CA44d78ecfE
 ```
 
 Only public addresses and the chain ID live in `VITE_*` variables; the private key is never placed here because every variable prefixed with `VITE_` is bundled. MetaMask signs transactions in the browser. If any of the three addresses is missing, [config.ts](frontend/src/contracts/config.ts) reports a configuration error instead of calling the contracts.
@@ -107,9 +107,9 @@ npm run dev
 
 Open `http://127.0.0.1:5173/`, choose **Connect wallet**, select MetaMask (or another injected wallet enabled in the browser) and switch to **Sepolia** (chain ID `11155111`, RPC list at [chainlist.org/chain/11155111](https://chainlist.org/chain/11155111)). If the wallet does not have Sepolia yet, the interface offers to add it; if the wallet is on another network, a wrong-network dialog appears immediately in the center of the screen, clears stale data and offers **Switch to Sepolia**; no reload is needed.
 
-Add the token to show the balance next to the wallet address: contract `0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`, symbol `USDC`, decimals `6`. MockUSDC is the token used for testing and its `mint` function is public, so a wallet with no funds can still receive tokens: call `mint` on Etherscan Write Contract with the amount in 6 decimals (1,000 USDC = `1000000000`). The wallet also needs Sepolia ETH to pay gas; faucet lists are in chainlist or at [sepoliafaucet.com](https://sepoliafaucet.com).
+Add the token to show the balance next to the wallet address: contract `0x460193B776F34D63413d358203516CA44d78ecfE`, symbol `USDC`, decimals `6`. MockUSDC is the token used for testing and its `mint` function is public, so a wallet with no funds can still receive tokens: call `mint` on Etherscan Write Contract with the amount in 6 decimals (1,000 USDC = `1000000000`). The wallet also needs Sepolia ETH to pay gas; faucet lists are in chainlist or at [sepoliafaucet.com](https://sepoliafaucet.com).
 
-Main flow: on **Saving plans**, choose a tenor and open a deposit (the first time requires an `approve` for USDC, then `openDeposit`); on **My deposits**, view the NFT and settle, withdraw early in full or in part, add principal, claim deferred interest or renew.
+Main flow: on **Saving plans**, choose a tenor and open a deposit (the first time requires an `approve` for USDC, then `openDeposit`); on **My deposits**, view the NFT and settle, withdraw early in full or in part, add principal, claim deferred interest or renew; on **History**, review closed deposits with their realised PnL (read-only).
 
 ## Testing
 
@@ -125,7 +125,7 @@ npm run lint
 Latest run (2026-10-30):
 
 ```text
-89 passing (contract)
+104 passing (contract)
 31 passing (frontend, Vitest)
 MockUSDC       100.00% lines / 100.00% statements
 VaultManager   100.00% lines / 100.00% statements
@@ -151,7 +151,7 @@ npm run test:sepolia:mature     # after maturity
 npm run test:sepolia:auto-renew # after maturity + grace
 ```
 
-Result of the `immediate` phase on 2026-10-29: 19 real transactions with total gas `77,866,819,359` wei. The script checked:
+Result of the `immediate` phase on 2026-10-29 on the **previous deployment** (retired addresses): 19 real transactions with total gas `77,866,819,359` wei. The script checked:
 
 - Opened 30-day plan D1 with `100 USDC`, topped up `50 USDC`, withdrew `40 USDC` early in part, and blocked a remainder below the minimum.
 - Pausing the vault blocked opening, top-up and early withdrawal; unpausing restored normal operation.
@@ -328,7 +328,7 @@ Remaining limitation: the reservation is only an accounting ledger inside the sa
 
 **Tests.** The cases in `VaultManager.ts` check role locking, one-time setup, reserving beyond the balance, the admin withdrawal cap, the vault losing its reserve and release on early withdrawal. The open, top-up and settlement cases in `SavingCore.ts` also check that `reservedInterest` increases/decreases accordingly.
 
-**Sepolia status.** The `0xC5Dd267C…a302` build includes full C2: `setCoreOnce`, locked `CORE_ROLE`, guaranteed reserves and the withdrawal cap. The `immediate` phase verified it on the real chain.
+**Sepolia status.** The `0x10E9eDb5…3c79` build includes full C2: `setCoreOnce`, locked `CORE_ROLE`, guaranteed reserves and the withdrawal cap. The `immediate` phase verified it on the real chain.
 
 ## Creative Challenge C3 — Partial early withdrawal
 
@@ -387,11 +387,11 @@ npx hardhat verify --network testnet <SavingCore> <MockUSDC> <VaultManager> 2592
 
 | Contract | Sepolia address |
 | --- | --- |
-| `MockUSDC` | [`0x1fFa8aF3aF716E245A5501B086d1C01375F192fc`](https://sepolia.etherscan.io/address/0x1fFa8aF3aF716E245A5501B086d1C01375F192fc#code) |
-| `VaultManager` | [`0xA128175f2C1099Ecc3933876a3d0BF931816867C`](https://sepolia.etherscan.io/address/0xA128175f2C1099Ecc3933876a3d0BF931816867C#code) |
-| `SavingCore` | [`0xC5Dd267CfefC629E722110F8086c0DDc33a5a302`](https://sepolia.etherscan.io/address/0xC5Dd267CfefC629E722110F8086c0DDc33a5a302#code) |
+| `MockUSDC` | [`0x460193B776F34D63413d358203516CA44d78ecfE`](https://sepolia.etherscan.io/address/0x460193B776F34D63413d358203516CA44d78ecfE#code) |
+| `VaultManager` | [`0x1c5533537118320021b5795473cb2552d11Bf9B5`](https://sepolia.etherscan.io/address/0x1c5533537118320021b5795473cb2552d11Bf9B5#code) |
+| `SavingCore` | [`0x10E9eDb55C0cD100F67DEc8b558649e66B263c79`](https://sepolia.etherscan.io/address/0x10E9eDb55C0cD100F67DEc8b558649e66B263c79#code) |
 
-Deployer, also the fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contracts deployed at block `12018179`; 12 setup transactions ended at block `12018193`, total gas `478,354,062,456` wei (≈ `0.000478` ETH). Full manifest at [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
+Deployer, also the fee receiver: [`0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`](https://sepolia.etherscan.io/address/0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731). Contracts deployed at block `12026923`; 12 setup transactions ended at block `12026936`, total gas `2,929,946,052` wei (≈ `0.0000033` ETH). Full manifest at [contracts/deployments/testnet.json](contracts/deployments/testnet.json).
 
 Five on-chain plans:
 
@@ -403,23 +403,16 @@ Five on-chain plans:
 | 4 | 365 days | 4.00% | 2,500 USDC | 500,000 USDC | 5.00% |
 | 5 | 1 day | 0.50% | 10 USDC | 10,000 USDC | 1.00% |
 
-Deploy and setup transactions (blocks `12018179`–`12018193`, total gas `478,354,062,456` wei ≈ `0.000478` ETH):
+Deploy and setup transactions (blocks `12026923`–`12026936`, total gas `2,929,946,052` wei ≈ `0.0000029` ETH):
 
-- Deploy `MockUSDC`: [`0x68b959...c460a`](https://sepolia.etherscan.io/tx/0x68b9592d4e3c1345a6f58e715e0aa8288ce0bcf62e37f1b08c6d41f6599c460a)
-- Deploy `VaultManager`: [`0x23176a...4fd8a`](https://sepolia.etherscan.io/tx/0x23176ab6658b4f56e9d227f7bfbf1359bd12cc5d39a78841f45ab0dd25a4fd8a)
-- Deploy `SavingCore`: [`0xb4612e...788c4`](https://sepolia.etherscan.io/tx/0xb4612e692a10e88372ef32e7a99d5f0cfe4a22986348dfbd8fb49eb81df788c4)
-- `setCoreOnce`: [`0xdf3f3c...14960`](https://sepolia.etherscan.io/tx/0xdf3f3cc8eb73ecfbf090be083525a1c9f40cbc3fdbff703f9e288b76fbf14960)
-- Mint `150,000 USDC` + approve + fund vault with `100,000 USDC`: [`0x2a7918...ad6e9a`](https://sepolia.etherscan.io/tx/0x2a7918d114886209ccefb3797d1fa7d44aad3494ab331e9c420d41ab95ad6e9a), [`0xd0c4da...d1ed85`](https://sepolia.etherscan.io/tx/0xd0c4da02801cfebfe73a1e73f166ce34a80478a9aba9811fb8ae49ebc9d1ed85), [`0x7b68f0...23d9e3`](https://sepolia.etherscan.io/tx/0x7b68f0170b9305cfc8f23cb3f2baa5011933e750f043b446fcd7dc127d23d9e3)
-- Create 5 plans: [`0x80c93e...`](https://sepolia.etherscan.io/tx/0x80c93e1474682cb9ea8fb28fc6e2507fc2a7fa4b321aa14d03673c7d055d376e), [`0x3460ff...`](https://sepolia.etherscan.io/tx/0x3460ff168d659c915f414383fb1b270958096e733cab31b7dd02068b6c641ccb), [`0x8c0c1b...`](https://sepolia.etherscan.io/tx/0x8c0c1b2e6203de09b5b380bf02b3d9d1a86124ba41ce45f765de7f12957ae17b), [`0xa3a860...`](https://sepolia.etherscan.io/tx/0xa3a860edd11f6d48ddb2c4a34d7e211837512b28d670d154bd3e48db60157b4d), [`0x5f8ac4...`](https://sepolia.etherscan.io/tx/0x5f8ac459ad943c22fc94824b1f0bfcca38b64fe49bbafc3d97361ac25783ebed)
+- Deploy `MockUSDC`: [`0x4ee113…a1d17`](https://sepolia.etherscan.io/tx/0x4ee11388af6d3f7ad5933a766e7d1d643ff6af68db590cdcb50d57f631fa1d17)
+- Deploy `VaultManager`: [`0x799f54…9eb29`](https://sepolia.etherscan.io/tx/0x799f5499ec0ce87e7bbd4a9fd4f9a4820a2b4fd66a3e806ac7fad9a06f99eb29)
+- Deploy `SavingCore`: [`0x95a234…aaa83`](https://sepolia.etherscan.io/tx/0x95a23485b6852266b6f7f2e94dac4b38a17008a40b34f79d9be732a56adaaa83)
+- `setCoreOnce`: [`0x2be2b9…e4012`](https://sepolia.etherscan.io/tx/0x2be2b9c4f10dd1e71141a50cc13007a1c4b48fc3f807ce0cb75ceb67f82e4012)
+- Mint `150,000 USDC` + approve + fund the vault with `100,000 USDC`: [`0x5653c4…3a533`](https://sepolia.etherscan.io/tx/0x5653c4068d55a93da923d342d86c4314d47595842c97e7a43c919f2cc593a533), [`0x4e4f71…3c483`](https://sepolia.etherscan.io/tx/0x4e4f7185424ba27132f5a9f2d39e6030e983980ed5ffa35c511f96dabb23c483), [`0x813d3d…d395a`](https://sepolia.etherscan.io/tx/0x813d3db1861e548c2436bcc19c64343a47585c9a98473c17dc5b3745cd7d395a)
+- Create 5 plans: [`0x2ccc21…2796f`](https://sepolia.etherscan.io/tx/0x2ccc213970458535d04b1db4f39686bd3c337937f3260313a71c60b11f02796f), [`0x854539…99b45`](https://sepolia.etherscan.io/tx/0x8545390fb6e32281267c5ae1991f6f39895d5e1d9d6f0e6813f4faa293b99b45), [`0xa3e862…5764c`](https://sepolia.etherscan.io/tx/0xa3e8620ed2ce165924d653f8d39df8c70a888926e6c1504095f21e37d305764c), [`0x1ae613…4eff0`](https://sepolia.etherscan.io/tx/0x1ae6132ebafcc6b2e677821c90714f7f2757c335cf9248b77ab0613ce954eff0), [`0x17fe35…3eb98`](https://sepolia.etherscan.io/tx/0x17fe35544f844c2db017639a50c76ce7cdbc13f8115fb09fae3277d2b2a3eb98)
 
-`immediate` phase e2e transactions (19 tx, total gas `77,866,819,359` wei):
-
-- **D1 (30-day plan, 100 USDC):** approve → open → top up 50 → partial early withdraw 40 → full early withdraw. Penalty 2.2 USDC sent to the correct fee receiver.
-- **Pause/reserve/role:** pause blocked open/top-up/early withdraw → unpause restored; second `setCoreOnce`, `grantRole`, `reserveInterest` from deployer all revert; withdrew `1 USDC` unreserved then returned it, vault unchanged.
-- **T1–T6 (1-day plan):** opened 6 deposits; partial early withdrawal on T2; top-up on T3; transferred T4 NFT to a second account; T1 early-withdrawn outside the script.
-- **Invariant:** `reservedInterest` always equals total interest of active deposits plus deferred interest; vault always covers promised amounts.
-
-Individual tx hashes: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325cc12515169808d2ce730e14d92ded1c667205b34e775af65bc), [open D1](https://sepolia.etherscan.io/tx/0x2f74c3a2662b766288c7e5628bd627cfe6b8224a120ce3bf9616aef85d333ba7), [top-up D1](https://sepolia.etherscan.io/tx/0xb4b67e8ac2f063b41c97205e8247464e04eba23a4842c598511b29f0bde1aaae), [partial D1](https://sepolia.etherscan.io/tx/0x6cecb9a831e4ab9a2f7a11a14326ed615ffc84a3c8bc2776e13d2a09866912bc), [pause](https://sepolia.etherscan.io/tx/0xac358e3b12504863886f732a41d58c29c6dda9a66455c415be62beb9c8bc6a32) / [unpause](https://sepolia.etherscan.io/tx/0x074d8e5a2729acb27f35a335b37a5f737e0c4d123ac9df5a12d5cd2ae13b1c26), [withdraw 1 USDC](https://sepolia.etherscan.io/tx/0x7d17d3a9267afba0966d0192795eada4b45b0b823a5008fd0a6a3486d0591108) / [return](https://sepolia.etherscan.io/tx/0xbe286008dcda7d05786367dc5d5b381005e52bc330976e4774a6e70cb9aad946), [full withdraw D1](https://sepolia.etherscan.io/tx/0xc8bc17e3be13b59e1557abd2e4ddc72afaafe1b353e12a5307a5c5ce531e65da), [T1–T6](https://sepolia.etherscan.io/tx/0x9d3e329a9a10b46fb2bafc03ce30450807f34f206adf4278e2ecd886af5f7005), [partial T2](https://sepolia.etherscan.io/tx/0x7c0ecc583abe897a171eee0e0aa742525299a252060098d54213d9669f5ed631), [top-up T3](https://sepolia.etherscan.io/tx/0x8b34730c5c37623dbdf04e148004e3bb515f4d8989520f5edde2951feaed15ac), [transfer T4 NFT](https://sepolia.etherscan.io/tx/0x7ca591211eb0c5e4e4f6340927d9a7e2b461b2bad6a538efba9ec5b35faaacab).
+The `immediate` e2e phase has **not been re-run** on this address set. The 2026-10-29 run belongs to the retired deployment and its state is archived outside the repo; `mature` and `auto-renew` still wait for real chain time.
 
 ## Deliverables
 

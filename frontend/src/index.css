@@ -15,6 +15,8 @@
   --color-on-inverse: #f7f8f5;
   --color-contrast: #151917;
   --color-on-contrast: #f5f7f4;
+  --color-positive: #2d6042;
+  --color-negative: #9a3b31;
   --color-positive-on-contrast: #9ed9b3;
   --color-negative-on-contrast: #f0a39a;
 }
@@ -38,6 +40,8 @@
     --color-on-inverse: #111412;
     --color-contrast: #202421;
     --color-on-contrast: #f1f4f0;
+    --color-positive: #a5d8b6;
+    --color-negative: #f0a39a;
   }
 
   html {

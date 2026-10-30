@@ -13,6 +13,8 @@ import { useUi } from '../state/ui'
 import type { Deposit } from '../types'
 import { TxSuccess } from './TxSuccess'
 
+const money = (value: number) => formatUsdc(value, false, true)
+
 type Stage = 'form' | 'pending' | 'done'
 
 export function DepositDialog({
@@ -72,9 +74,9 @@ export function DepositDialog({
   const validationMessage = !plan
     ? copy.validationPlanMissing
     : !meetsMinimum
-      ? copy.validationMin(formatUsdc(plan.minDeposit))
+      ? copy.validationMin(money(plan.minDeposit))
       : !meetsMaximum
-        ? copy.validationMax(formatUsdc(plan.maxDeposit))
+        ? copy.validationMax(money(plan.maxDeposit))
         : !hasBalance
           ? copy.validationBalance
           : null
@@ -98,7 +100,7 @@ export function DepositDialog({
       const deposit = await openDeposit(plan.id, parsedAmount)
       const successTitle = copy.toastTitle(deposit.certificateNo)
       const successMessage = copy.toastMessage(
-        formatUsdc(deposit.principal),
+        money(deposit.principal),
         formatDate(deposit.maturityAt, lang),
       )
       setSuccess({ title: successTitle, message: successMessage })
@@ -185,10 +187,10 @@ export function DepositDialog({
                     {copy.doneTitle(created.certificateNo)}
                   </h3>
                   <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
-                    {copy.doneBody(formatUsdc(created.principal))}
+                    {copy.doneBody(money(created.principal))}
                   </p>
                   <div className="mt-7 w-full space-y-2 text-left">
-                    <SummaryRow label={copy.expectedInterest} value={formatUsdc(interest) + ' USDC'} />
+                    <SummaryRow label={copy.expectedInterest} value={money(interest) + ' USDC'} />
                     <SummaryRow label={copy.maturityDate} value={formatDate(created.maturityAt, lang)} />
                     <SummaryRow label={copy.lockedApr} value={formatBps(created.aprBpsAtOpen)} />
                   </div>
@@ -224,7 +226,7 @@ export function DepositDialog({
                     </label>
                     <span className="text-xs text-muted">
                       {copy.available}{' '}
-                      <span className="mono text-ink">{formatUsdc(state.wallet.balance)}</span> USDC
+                      <span className="mono text-ink">{money(state.wallet.balance)}</span> USDC
                     </span>
                   </div>
                   <div className="relative mt-2">
@@ -253,7 +255,7 @@ export function DepositDialog({
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-3" id="deposit-amount-help">
                     <span className="text-[11px] text-muted">
-                      {copy.range(formatUsdc(plan.minDeposit), formatUsdc(plan.maxDeposit))}
+                      {copy.range(money(plan.minDeposit), money(plan.maxDeposit))}
                     </span>
                     <button
                       type="button"
@@ -274,7 +276,7 @@ export function DepositDialog({
                               {copy.expectedInterest}
                             </p>
                             <p className="mt-2 text-[clamp(1.9rem,5vw,2.6rem)] font-medium leading-none tracking-[-0.06em] tabular-nums">
-                              +{formatUsdc(interest)}
+                              +{money(interest)}
                               <span className="ml-2 text-xs font-normal tracking-normal text-on-contrast/65">USDC</span>
                             </p>
                           </div>
@@ -286,7 +288,7 @@ export function DepositDialog({
                               {copy.receiveAtMaturity}
                             </p>
                             <p className="mt-1 text-sm tabular-nums">
-                              {formatUsdc(parsedAmount + interest)} USDC
+                              {money(parsedAmount + interest)} USDC
                             </p>
                           </div>
                           <div>
@@ -305,7 +307,7 @@ export function DepositDialog({
                     <SummaryRow label={copy.lockedApr} value={formatBps(plan.aprBps)} />
                     <SummaryRow
                       label={copy.penalty}
-                      value={formatBps(plan.penaltyBps) + ' · ' + formatUsdc(penalty) + ' USDC'}
+                      value={formatBps(plan.penaltyBps) + ' · ' + money(penalty) + ' USDC'}
                     />
                   </div>
 

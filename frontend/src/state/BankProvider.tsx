@@ -26,7 +26,9 @@ function emptyBankState(): BankState {
     plans: [],
     deposits: [],
     wallet: { connected: false, mode: null, address: null, balance: 0, name: null, icon: null },
-    vault: { balance: 0 },
+    vault: { balance: 0, reserved: 0, paused: false, core: null, feeReceiver: null },
+    coreBalance: 0,
+    roles: { admin: false, pauser: false, planManager: false },
   }
 }
 
@@ -83,6 +85,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const [state, setState] = useState<BankState>(emptyBankState)
   const [chainLoading, setChainLoading] = useState(false)
+  const [chainLoaded, setChainLoaded] = useState(false)
   const [chainError, setChainError] = useState<string | null>(null)
   const [networkMismatch, setNetworkMismatch] = useState(false)
   const address = state.wallet.address
@@ -92,6 +95,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
     if (!isChainMode || !address) {
       setChainError(null)
       setNetworkMismatch(false)
+      setChainLoaded(false)
       return
     }
     setChainLoading(true)
@@ -107,10 +111,19 @@ export function BankProvider({ children }: { children: ReactNode }) {
           plans: snapshot.plans,
           deposits: snapshot.deposits,
           wallet: { ...current.wallet, balance: snapshot.walletBalance },
-          vault: { balance: snapshot.vaultBalance },
+          vault: {
+            balance: snapshot.vaultBalance,
+            reserved: snapshot.vaultReserved,
+            paused: snapshot.vaultPaused,
+            core: snapshot.vaultCore,
+            feeReceiver: snapshot.vaultFeeReceiver,
+          },
+          coreBalance: snapshot.coreBalance,
+          roles: snapshot.roles,
         }
       })
       setChainError(null)
+      setChainLoaded(true)
     } catch (cause) {
       console.error('Chain refresh failed', cause)
       if (causeMessage(cause).startsWith('WRONG_NETWORK:')) {
@@ -122,7 +135,9 @@ export function BankProvider({ children }: { children: ReactNode }) {
             plans: [],
             deposits: [],
             wallet: { ...current.wallet, balance: 0 },
-            vault: { balance: 0 },
+            vault: { balance: 0, reserved: 0, paused: false, core: null, feeReceiver: null },
+            coreBalance: 0,
+            roles: { admin: false, pauser: false, planManager: false },
           }
         })
       }
@@ -356,7 +371,9 @@ export function BankProvider({ children }: { children: ReactNode }) {
               plans: [],
               deposits: [],
               wallet: { ...current.wallet, balance: 0 },
-              vault: { balance: 0 },
+              vault: { balance: 0, reserved: 0, paused: false, core: null, feeReceiver: null },
+              coreBalance: 0,
+              roles: { admin: false, pauser: false, planManager: false },
             }))
           } else {
             setNetworkMismatch(false)
@@ -372,6 +389,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       state,
       isChainMode,
       chainLoading,
+      chainLoaded,
       chainError,
       networkMismatch,
       openDeposit,
@@ -388,6 +406,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       state,
       isChainMode,
       chainLoading,
+      chainLoaded,
       chainError,
       networkMismatch,
       openDeposit,

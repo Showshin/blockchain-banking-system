@@ -14,6 +14,12 @@ const PlansPage = lazy(() =>
 const DepositsPage = lazy(() =>
   import('./pages/DepositsPage').then((module) => ({ default: module.DepositsPage })),
 )
+const HistoryPage = lazy(() =>
+  import('./pages/HistoryPage').then((module) => ({ default: module.HistoryPage })),
+)
+const AdminPage = lazy(() =>
+  import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })),
+)
 
 export default function App() {
   return (
@@ -28,6 +34,8 @@ export default function App() {
                     <Routes>
                       <Route path="/" element={<PlansPage />} />
                       <Route path="/so-tiet-kiem" element={<DepositsPage />} />
+                      <Route path="/lich-su" element={<HistoryPage />} />
+                      <Route path="/quan-tri" element={<AdminPage />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>

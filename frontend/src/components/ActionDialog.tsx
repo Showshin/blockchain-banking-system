@@ -10,6 +10,8 @@ import { useUi } from '../state/ui'
 import { Modal, ModalClose } from './Modal'
 import { TxSuccess } from './TxSuccess'
 
+const money = (value: number) => formatUsdc(value, false, true)
+
 export type ActionMode = 'withdraw' | 'renew' | 'topup' | 'claim'
 
 export function ActionDialog({
@@ -77,7 +79,7 @@ export function ActionDialog({
       : invalidAmount
         ? copy.invalidPartial
         : isPartial && remainingPrincipal < minimumRemaining
-          ? copy.belowMinimum(formatUsdc(minimumRemaining))
+          ? copy.belowMinimum(money(minimumRemaining))
           : null
   const penalty = amountError || matured ? 0 : penaltyFor(requestedAmount, deposit.penaltyBpsAtOpen)
 
@@ -92,7 +94,7 @@ export function ActionDialog({
         : parsedTopUp <= 0
           ? copy.invalidTopUp
           : parsedTopUp > topUpRoom
-            ? copy.topUpAboveMaximum(formatUsdc(plan?.maxDeposit ?? 0))
+            ? copy.topUpAboveMaximum(money(plan?.maxDeposit ?? 0))
             : parsedTopUp > state.wallet.balance
               ? t.errors.insufficientBalance
               : null
@@ -161,8 +163,8 @@ export function ActionDialog({
           showSuccess(
             copy.toastDeferred,
             copy.toastDeferredMessage(
-              formatUsdc(receipt.payout),
-              formatUsdc(receipt.pendingInterest),
+              money(receipt.payout),
+              money(receipt.pendingInterest),
             ),
             'info',
           )
@@ -175,12 +177,12 @@ export function ActionDialog({
                 : copy.toastEarly,
             receipt.kind === 'partial'
               ? copy.toastPartialMessage(
-                  formatUsdc(receipt.payout),
-                  formatUsdc(receipt.remainingPrincipal),
+                  money(receipt.payout),
+                  money(receipt.remainingPrincipal),
                 )
               : copy.toastReceived(
-                  formatUsdc(receipt.payout),
-                  receipt.penalty > 0 ? formatUsdc(receipt.penalty) : '',
+                  money(receipt.payout),
+                  receipt.penalty > 0 ? money(receipt.penalty) : '',
                 ),
             receipt.kind === 'mature' ? 'success' : 'info',
           )
@@ -191,7 +193,7 @@ export function ActionDialog({
         showSuccess(
           copy.toastRenewed(created.certificateNo),
           copy.toastRenewedMessage(
-            formatUsdc(created.principal),
+            money(created.principal),
             formatDate(created.maturityAt, lang),
           ),
         )
@@ -200,15 +202,15 @@ export function ActionDialog({
         showSuccess(
           copy.toastToppedUp,
           copy.toastToppedUpMessage(
-            formatUsdc(receipt.amount),
-            formatUsdc(receipt.newPrincipal),
-            formatUsdc(receipt.interestAdded),
+            money(receipt.amount),
+            money(receipt.newPrincipal),
+            money(receipt.interestAdded),
           ),
         )
       } else {
         if (!claimable) throw new Error(copy.claimUnavailable)
         const receipt = await claimInterest(deposit.id)
-        showSuccess(copy.toastClaimed, copy.toastClaimedMessage(formatUsdc(receipt.interest)))
+        showSuccess(copy.toastClaimed, copy.toastClaimedMessage(money(receipt.interest)))
       }
 
       if (successTitle) {
@@ -299,7 +301,7 @@ export function ActionDialog({
                 {heroLabel}
               </p>
               <p className="mt-1.5 whitespace-nowrap text-[clamp(1.5rem,4.8vw,1.9rem)] font-medium leading-none tracking-[-0.055em] tabular-nums">
-                {formatUsdc(heroValue)}
+                {money(heroValue)}
                 <span className="ml-1.5 text-[11px] font-normal tracking-normal text-on-contrast/60">
                   USDC
                 </span>
@@ -311,13 +313,13 @@ export function ActionDialog({
                   maturedDeferred ? (
                     <SummaryMetric
                       label={copy.claimPending}
-                      value={formatUsdc(interest) + ' USDC'}
+                      value={money(interest) + ' USDC'}
                       tone="positive"
                     />
                   ) : (
                     <SummaryMetric
                       label={copy.interestReceived}
-                      value={formatUsdc(interest) + ' USDC'}
+                      value={money(interest) + ' USDC'}
                       tone={interest > 0 ? 'positive' : 'neutral'}
                     />
                   )
@@ -326,7 +328,7 @@ export function ActionDialog({
                     <SummaryMetric label={copy.noInterest} value="0.00 USDC" />
                     <SummaryMetric
                       label={copy.earlyPenalty}
-                      value={formatUsdc(penalty) + ' USDC'}
+                      value={money(penalty) + ' USDC'}
                       tone={penalty > 0 ? 'negative' : 'neutral'}
                     />
                   </>
@@ -335,7 +337,7 @@ export function ActionDialog({
                 <>
                   <SummaryMetric
                     label={copy.interestAdded}
-                    value={formatUsdc(interest) + ' USDC'}
+                    value={money(interest) + ' USDC'}
                     tone={interest > 0 ? 'positive' : 'neutral'}
                   />
                   <SummaryMetric
@@ -347,7 +349,7 @@ export function ActionDialog({
                 <>
                   <SummaryMetric
                     label={copy.interestIncrease}
-                    value={formatUsdc(topUpInterest) + ' USDC'}
+                    value={money(topUpInterest) + ' USDC'}
                     tone={topUpInterest > 0 ? 'positive' : 'neutral'}
                   />
                   <SummaryMetric
@@ -418,12 +420,12 @@ export function ActionDialog({
             >
               <span>
                 {copy.remainingPrincipal}{' '}
-                <span className="tabular-nums text-ink">{formatUsdc(remainingPrincipal)}</span>{' '}
+                <span className="tabular-nums text-ink">{money(remainingPrincipal)}</span>{' '}
                 USDC
               </span>
               <span>
                 {copy.minimumRemaining}{' '}
-                <span className="tabular-nums text-ink">{formatUsdc(minimumRemaining)}</span>{' '}
+                <span className="tabular-nums text-ink">{money(minimumRemaining)}</span>{' '}
                 USDC
               </span>
             </div>
@@ -483,8 +485,8 @@ export function ActionDialog({
               id="topup-amount-hint"
               className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 text-[10.5px] text-muted"
             >
-              <span>{copy.topUpRoom(formatUsdc(topUpRoom))}</span>
-              <span>{copy.walletBalance(formatUsdc(state.wallet.balance))}</span>
+              <span>{copy.topUpRoom(money(topUpRoom))}</span>
+              <span>{copy.walletBalance(money(state.wallet.balance))}</span>
             </div>
             {showTopUpError ? (
               <p
@@ -502,7 +504,7 @@ export function ActionDialog({
           <div className="mt-4 rounded-[16px] border border-line bg-surface px-4 py-3">
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="text-muted">{copy.claimPending}</span>
-              <span className="font-medium tabular-nums">{formatUsdc(pendingInterest)} USDC</span>
+              <span className="font-medium tabular-nums">{money(pendingInterest)} USDC</span>
             </div>
             <p className="mt-1 text-[10.5px] leading-relaxed text-muted">{copy.descClaim}</p>
           </div>
