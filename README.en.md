@@ -175,7 +175,7 @@ On 2026-10-29 wallet `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` operated the i
 
 ### Auto-renew keeper
 
-Section 3.5 of the brief requires an off-chain bot that calls `autoRenewDeposit`. The keeper is a standalone package at [keeper/](keeper/README.md): it imports neither Hardhat nor `contracts/`, so it needs only Node and an RPC endpoint and can be copied to a VPS or PaaS as-is. Each pass scans `nextDepositId`, reads every deposit and selects only `Active` deposits where `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` is permissionless, so the bot wallet needs no role, no USDC and no approval — only ETH for gas.
+Section 3.5 of the brief requires an off-chain bot that calls `autoRenewDeposit`. The keeper is a standalone package at [keeper/](keeper/README.md): it imports neither Hardhat nor `contracts/`, so it needs only Node and an RPC endpoint and can be copied to a VPS or PaaS as-is. Each pass reads every deposit in **a single `eth_call`** (Multicall3) and selects only `Active` deposits where `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` is permissionless, so the bot wallet needs no role, no USDC and no approval — only ETH for gas.
 
 ```powershell
 npm --prefix keeper install

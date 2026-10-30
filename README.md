@@ -175,7 +175,7 @@ Ngày 2026-10-29, ví `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` thao tác tr�
 
 ### Keeper tự động gia hạn
 
-Mục 3.5 của đề yêu cầu một bot off-chain gọi `autoRenewDeposit`. Keeper là package độc lập ở [keeper/](keeper/README.md): không import Hardhat hay `contracts/`, chỉ cần Node và một RPC endpoint, nên copy nguyên folder lên VPS hoặc PaaS là chạy được. Mỗi lượt nó quét `nextDepositId`, đọc từng sổ và chỉ chọn sổ `Active` có `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` không giới hạn người gọi, nên ví bot không cần role, không cần USDC và không cần approve — chỉ cần ETH trả gas.
+Mục 3.5 của đề yêu cầu một bot off-chain gọi `autoRenewDeposit`. Keeper là package độc lập ở [keeper/](keeper/README.md): không import Hardhat hay `contracts/`, chỉ cần Node và một RPC endpoint, nên copy nguyên folder lên VPS hoặc PaaS là chạy được. Mỗi lượt nó đọc toàn bộ sổ trong **một lần `eth_call`** (Multicall3) và chỉ chọn sổ `Active` có `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` không giới hạn người gọi, nên ví bot không cần role, không cần USDC và không cần approve — chỉ cần ETH trả gas.
 
 ```powershell
 npm --prefix keeper install

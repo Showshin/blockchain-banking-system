@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { loadConfig } from "../src/config.ts";
-import { DEPOSIT_STATUS, partitionDeposits, type DepositSnapshot } from "../src/keeper.ts";
+import { DEPOSIT_STATUS, interestFrom, partitionDeposits, type DepositSnapshot } from "../src/keeper.ts";
 
 const GRACE = 259_200n;
 const MATURITY = 1_800_000_000n;
@@ -81,6 +81,13 @@ test("splits a mixed batch without losing any deposit", () => {
   assert.deepEqual(partitioned.eligible.map((entry) => entry.id), [1n]);
   assert.deepEqual(partitioned.pending.map((entry) => entry.id), [2n]);
   assert.equal(partitioned.terminal, 1);
+});
+
+test("computes maturity interest the same way SavingCore does", () => {
+  // 1,000 USDC for 90 days at 225 bps: 7,776,000s x 1e6 principal-seconds, verified on chain.
+  assert.equal(interestFrom(7_776_000_000_000_000n, 225n), 5_547_945n);
+  // Sub-unit results round down to zero, exactly like Math.mulDiv.
+  assert.equal(interestFrom(1n, 1n), 0n);
 });
 
 test("defaults to a continuous bot with conservative limits", () => {

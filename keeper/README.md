@@ -60,6 +60,7 @@ nohup npm start >> keeper.log 2>&1 &
 | `KEEPER_INTERVAL_SECONDS` | `300` | Nghỉ giữa hai lượt ở chế độ `watch` |
 | `KEEPER_MAX_RENEWALS_PER_RUN` | `10` | Chặn số giao dịch mỗi lượt |
 | `KEEPER_LOG_WAITING_LIMIT` | `0` | Số sổ đang chờ được in mỗi lượt; `0` là in hết |
+| `KEEPER_TABLE` | theo terminal | `1` luôn in bảng, `0` luôn in dòng log; bỏ trống thì tự chọn |
 | `KEEPER_MAX_COST_ETH` | `0.005` | Trần chi phí gas cộng dồn trong một lượt |
 | `KEEPER_MIN_BALANCE_RESERVE_ETH` | `0.005` | Số dư ETH tối thiểu phải giữ lại |
 | `MAX_BASE_FEE_GWEI` | `1` | Từ chối gửi khi base fee vượt ngưỡng |
@@ -67,14 +68,36 @@ nohup npm start >> keeper.log 2>&1 &
 | `MAX_PRIORITY_FEE_GWEI` | `0.1` | Trần tip |
 | `GAS_LIMIT_MULTIPLIER_BPS` | `12000` | Gas limit = estimate × 1,2 |
 
+## Bảng theo dõi
+
+Khi chạy trực tiếp trong terminal, mỗi lượt in một bảng thay vì danh sách dòng:
+
+```text
+7 sổ đang mở · 0 tới hạn · 3 đã đóng · tổng gốc 15,070.00 USDC
+chain 2026-10-30 03:04:24 UTC · vault 100,000.00 USDC (đã hứa 27.89 USDC) · 1 eth_call (multicall)
+
+  ID   Gói    Gốc (USDC)   Lãi (USDC)  Trạng thái    Đáo hạn       Renew từ      Còn lại
+───────────────────────────────────────────────────────────────────────────────────────────
+  #3     5         20.00     0.002739  đang chờ      10-30 08:20   11-02 08:20   3d 05h
+  #9     5     10,000.00     0.136986  đang chờ      10-30 17:38   11-02 17:38   3d 14h
+ #10     2      5,000.00        27.74  đang chờ      01-27 18:12   01-30 18:12   92d 15h
+
+đã đóng: #1 đã tất toán, #2 đã tất toán, #8 đã tất toán
+```
+
+Sổ tới hạn được tô xanh và xếp lên đầu; sổ đã đóng chỉ liệt kê một dòng ở cuối. Khi output bị pipe sang file hoặc process khác, keeper tự chuyển về dòng log để dễ grep; đặt `KEEPER_TABLE=1` để ép in bảng.
+
 ## Cách hoạt động
 
-Mỗi lượt:
+Mỗi lượt là **một `eth_call`** gửi tới Multicall3 (`0xcA11bde05977b3631167028862bE2a173976CA11`), gộp trong cùng một block:
 
-1. Đọc `nextDepositId`, `gracePeriod`, `paused`, số dư và `reservedInterest` của vault.
-2. Đọc từng sổ (`deposits`, `ownerOf`, `interestAtMaturity`) và chỉ chọn sổ `Active` có `block.timestamp >= maturityAt + gracePeriod`.
-3. `staticCall` mô phỏng `autoRenewDeposit` — revert bị chặn ở đây, không tốn gas.
-4. Gửi giao dịch qua gas guard, đọc event `Renewed` để lấy `newDepositId`.
+1. `getCurrentBlockTimestamp`, `gracePeriod`, `nextDepositId`, `paused`, `balanceOf(vault)`, `reservedInterest`.
+2. `deposits(id)` cho từng sổ — lãi tính tại chỗ từ `principalSeconds` và `aprBpsAtOpen`, không cần gọi `interestAtMaturity`.
+3. Chọn sổ `Active` có `block.timestamp >= maturityAt + gracePeriod`.
+4. `staticCall` mô phỏng `autoRenewDeposit` — revert bị chặn ở đây, không tốn gas.
+5. Gửi giao dịch qua gas guard, đọc event `Renewed` để lấy `newDepositId`.
+
+Đọc gộp trong một block còn chính xác hơn cách cũ: đồng hồ và trạng thái sổ là ảnh chụp tại cùng một thời điểm, không có khe hở giữa lúc đọc block và lúc đọc từng sổ. Nếu RPC không có Multicall3, keeper tự lùi về đọc từng sổ và ghi rõ lý do trong log.
 
 Mỗi sổ chỉ renew một lần: sau khi thành công `status` thành `AutoRenewed` và lần quét sau bỏ qua.
 
@@ -87,7 +110,9 @@ Mỗi sổ chỉ renew một lần: sau khi thành công `status` thành `AutoRe
 
 ## Giới hạn đã biết
 
-- Quét toàn bộ sổ mỗi lượt: O(n) lần `eth_call`. Với vài chục sổ thì ổn; quy mô lớn nên chuyển sang theo dõi event hoặc indexer.
+- Mỗi lượt tốn **1 `eth_call`** bất kể có bao nhiêu sổ, miễn là tổng số sub-call không vượt 300. Vượt ngưỡng đó keeper chia lô, nên 1.000 sổ là 4 lần gọi chứ không phải 1.
+- `ownerOf` chỉ được gọi cho sổ đủ điều kiện (dùng để in dry-run), nên khi không có sổ nào tới hạn thì lượt quét đúng 1 lần gọi.
+- Phụ thuộc Multicall3 tại địa chỉ chuẩn. Nếu RPC không có contract này, keeper lùi về đọc từng sổ (`6 + N` lần) và ghi lý do vào log.
 - Không có cơ chế chống chạy trùng: hai keeper cùng trỏ vào một deployment sẽ tranh nonce và một trong hai bỏ lượt.
 
 ## Test

@@ -1,28 +1,17 @@
-import { formatUnits } from "ethers";
 import { createContext, type KeeperContext } from "./chain.ts";
 import { loadConfig, type KeeperConfig } from "./config.ts";
 import {
   type RenewalOutcome,
+  type ScanCache,
   type ScanResult,
   preflight,
   renewDeposit,
   scanDeposits,
 } from "./keeper.ts";
+import { eth, renderScan, renderScanPlain, usdc } from "./report.ts";
 
 export function log(message: string): void {
   console.log(`[${new Date().toISOString()}] ${message}`);
-}
-
-export function usdc(baseUnits: bigint): string {
-  return `${formatUnits(baseUnits, 6)} USDC`;
-}
-
-export function eth(wei: bigint): string {
-  return `${formatUnits(wei, 18)} ETH`;
-}
-
-function isoFromChainSeconds(seconds: bigint): string {
-  return new Date(Number(seconds) * 1000).toISOString();
 }
 
 export type PassSummary = {
@@ -34,37 +23,46 @@ export type PassSummary = {
 };
 
 function reportScan(scan: ScanResult, waitingLimit: number): void {
-  log(
-    `scan: ${scan.total} deposits, ${scan.active.length} active, ${scan.terminal} terminal, ` +
-      `${scan.eligible.length} eligible, ${scan.pending.length} waiting`,
-  );
-  log(
-    `chain time ${isoFromChainSeconds(scan.now)}; grace ${scan.gracePeriod}s; ` +
-      `vault ${usdc(scan.vaultBalance)} (reserved ${usdc(scan.reservedInterest)})`,
-  );
-  if (scan.paused) {
-    log("vault is paused: every renewal would revert with 'Core: system paused'");
+  if (scan.fallbackReason) {
+    log(`multicall unavailable, fell back to per-deposit reads: ${scan.fallbackReason}`);
   }
+
+  const useTable =
+    process.env.KEEPER_TABLE === "1" ||
+    (process.stdout.isTTY && process.env.KEEPER_TABLE !== "0");
+  if (!useTable) {
+    for (const entry of renderScanPlain(scan).split("\n")) log(entry);
+    return;
+  }
+
   const limit = waitingLimit;
-  const shown = limit > 0 ? scan.pending.slice(0, limit) : scan.pending;
-  for (const entry of shown) {
-    log(
-      `waiting #${entry.id}: plan ${entry.planId}, ${usdc(entry.principal)}, ` +
-        `eligible at ${isoFromChainSeconds(entry.eligibleAt)}`,
+  const trimmed =
+    limit > 0 && scan.pending.length > limit
+      ? {
+          ...scan,
+          pending: scan.pending.slice(0, limit),
+        }
+      : scan;
+
+  console.log(`\n${renderScan(trimmed)}`);
+  if (trimmed !== scan) {
+    console.log(
+      `  ${dimNote(
+        `còn ${scan.pending.length - trimmed.pending.length} sổ không hiện (KEEPER_LOG_WAITING_LIMIT)`,
+      )}`,
     );
   }
-  if (shown.length < scan.pending.length) {
-    log(
-      `waiting: ${scan.pending.length - shown.length} more not listed ` +
-        `(set KEEPER_LOG_WAITING_LIMIT=0 to print all)`,
-    );
-  }
+  console.log("");
 }
 
-export async function runPass(context: KeeperContext): Promise<PassSummary> {
+function dimNote(text: string): string {
+  return !process.env.NO_COLOR ? `\u001b[2m${text}\u001b[0m` : text;
+}
+
+export async function runPass(context: KeeperContext, cache: ScanCache): Promise<PassSummary> {
   const summary: PassSummary = { renewed: 0, skipped: 0, failed: 0, spentWei: 0n, outcomes: [] };
 
-  const scan = await scanDeposits(context);
+  const scan = await scanDeposits(context, cache);
   reportScan(scan, context.config.logWaitingLimit);
 
   if (scan.paused) {
@@ -155,6 +153,8 @@ async function main(): Promise<void> {
   const context = await createContext(config);
   banner(config, context.address);
 
+  const cache: ScanCache = { nextDepositId: 0n };
+
   let stopping = false;
   process.on("SIGINT", () => {
     stopping = true;
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
 
     let summary: PassSummary;
     try {
-      summary = await runPass(context);
+      summary = await runPass(context, cache);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       log(`pass ${pass} aborted: ${reason}`);
