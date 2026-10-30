@@ -24,6 +24,9 @@
     "test:sepolia:mature": "npm --prefix contracts run testnet:e2e:mature",
     "test:sepolia:auto-renew": "npm --prefix contracts run testnet:e2e:auto-renew",
     "test:sepolia:status": "npm --prefix contracts run testnet:e2e:status",
+    "keeper:start": "npm --prefix keeper start",
+    "keeper:test": "npm --prefix keeper test",
+    "keeper:typecheck": "npm --prefix keeper run typecheck",
     "configure:frontend": "npm --prefix contracts run configure:frontend"
   }
 }

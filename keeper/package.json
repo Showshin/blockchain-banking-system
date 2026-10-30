@@ -1,0 +1,23 @@
+{
+  "name": "tich-keeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Off-chain keeper that renews matured TÍCH deposits",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/keeper.test.ts"
+  },
+  "dependencies": {
+    "ethers": "6.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2"
+  }
+}

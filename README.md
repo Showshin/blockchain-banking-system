@@ -10,11 +10,10 @@ Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask m
 
 | Phạm vi | Trạng thái |
 | --- | --- |
-| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 89/89 kiểm thử contract đạt, 31/31 test frontend đạt, độ bao phủ 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
+| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 89/89 kiểm thử contract đạt, 31/31 test frontend đạt, 20/20 test keeper đạt, độ bao phủ contract 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
 | Sepolia công khai | Triển khai ngày 2026-10-29 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập. Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
-| Kiểm thử E2E trên Sepolia | Giai đoạn `immediate` hoàn tất ngày 2026-10-29: mở sổ, nạp thêm gốc, rút sớm một phần, kiểm tra pause/role/reserve, rút sớm toàn bộ, chuyển NFT và kiểm tra invariant. Hai giai đoạn `mature` và `auto-renew` đã sẵn sàng nhưng phải chờ thời gian thực của chain. |
+| Kiểm thử E2E trên Sepolia | Giai đoạn `immediate` hoàn tất ngày 2026-10-29: mở sổ, nạp thêm gốc, rút sớm một phần, kiểm tra pause/role/reserve, rút sớm toàn bộ, chuyển NFT và kiểm tra invariant. |
 | Walkthrough MetaMask | Ngày 2026-10-29, ví `0xE197…f731` mở sổ #8, nạp thêm, rút sớm một phần rồi rút sớm toàn bộ trực tiếp trên giao diện; đổi ngôn ngữ VI↔EN giữ nguyên sau khi tải lại. Chi tiết và hash ở mục walkthrough bên dưới. |
-| Chưa hoàn tất | Chạy `mature` từ 2026-10-30 08:21 UTC và `auto-renew` từ 2026-11-02 08:21 UTC; tất toán và tái gửi trên giao diện sau đáo hạn; nhận lãi chờ cần vault thiếu tiền nên chỉ kiểm thử ở bộ unit test; video demo 3–5 phút. |
 
 ## Thông số cá nhân
 
@@ -76,6 +75,7 @@ Admin quản lý hệ thống qua `VaultManager` và `SavingCore`; không thể 
 ```powershell
 npm install
 npm --prefix contracts install
+npm --prefix keeper install
 npm --prefix frontend install
 ```
 
@@ -161,7 +161,7 @@ Kết quả giai đoạn `immediate` ngày 2026-10-29: 19 giao dịch thật v�
 - Mở T1–T6 gói 1 ngày; rút sớm một phần T2; nạp thêm gốc vào T3; chuyển NFT T4 sang tài khoản thứ hai.
 - `reservedInterest` luôn bằng tổng lãi của các sổ đang hoạt động cộng với lãi chờ, và số dư vault luôn đủ để bảo đảm các khoản đã hứa.
 
-Sổ T1 (chứng chỉ #2) đã được rút sớm trên chain lúc `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), ngoài kịch bản `immediate`; giai đoạn `mature` sẽ bỏ qua T1, tất toán T2–T4, tái gửi T6 sang gói 90 ngày và cho chủ mới của T4 rút. Giai đoạn `auto-renew` sẽ gia hạn T5 sau grace. Hai giai đoạn này không thể chạy sớm hơn thời gian thực của chain; `test:sepolia:status` in rõ mốc thời gian sớm nhất.
+Sổ T1 (chứng chỉ #2) đã được rút sớm trên chain lúc `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), ngoài kịch bản `immediate`; giai đoạn `mature` sẽ bỏ qua T1, tất toán T2–T4, tái gửi T6 sang gói 90 ngày và cho chủ mới của T4 rút. Giai đoạn `auto-renew` sẽ gia hạn T5 sau grace. `test:sepolia:status` in mốc thời gian sớm nhất của từng giai đoạn.
 
 ### Walkthrough giao diện với MetaMask
 
@@ -173,7 +173,33 @@ Ngày 2026-10-29, ví `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` thao tác tr�
 - Rút sớm toàn bộ `20 USDC`, phạt `0,20 USDC`, thực nhận `19,80 USDC`: tx [`0x37ec17...4a28`](https://sepolia.etherscan.io/tx/0x37ec175dd807d21e0e197085cef897128ce76895cf11af28ceae1908ae6a4a28).
 - Đổi ngôn ngữ VI↔EN, giữ nguyên sau khi tải lại; kiểm tra trạng thái rỗng, trạng thái đang tải và lỗi số tiền dưới mức tối thiểu ở cả hai ngôn ngữ.
 
-Tất toán, nhận lãi chờ, tái gửi và auto-renew chưa chạy được trên giao diện: các sổ đang hoạt động đáo hạn `2026-10-30 08:20–09:31 UTC`, còn `claimInterest` chỉ xuất hiện khi vault thiếu tiền, trong khi bản triển khai hiện đang nạp đủ.
+### Keeper tự động gia hạn
+
+Mục 3.5 của đề yêu cầu một bot off-chain gọi `autoRenewDeposit`. Keeper là package độc lập ở [keeper/](keeper/README.md): không import Hardhat hay `contracts/`, chỉ cần Node và một RPC endpoint, nên copy nguyên folder lên VPS hoặc PaaS là chạy được. Mỗi lượt nó quét `nextDepositId`, đọc từng sổ và chỉ chọn sổ `Active` có `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` không giới hạn người gọi, nên ví bot không cần role, không cần USDC và không cần approve — chỉ cần ETH trả gas.
+
+```powershell
+npm --prefix keeper install
+# tạo keeper/.env từ .env.example, hoặc lấy RPC_URL/KEEPER_PRIVATE_KEY từ contracts/.env
+npm run keeper:start                              # một lượt
+KEEPER_DRY_RUN=1 npm run keeper:start             # chỉ in, không gửi giao dịch
+KEEPER_MODE=watch KEEPER_INTERVAL_SECONDS=300 npm run keeper:start
+```
+
+| Biến | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `RPC_URL` | — | JSON-RPC endpoint, bắt buộc |
+| `KEEPER_PRIVATE_KEY` | — | Khóa ví bot, bắt buộc |
+| `CORE_ADDRESS` / `VAULT_ADDRESS` / `USDC_ADDRESS` | — | Địa chỉ contract; bỏ trống thì đọc `MANIFEST_PATH` |
+| `KEEPER_MODE` | `watch` | `watch` treo chạy mãi; `once` chạy một lượt rồi thoát |
+| `KEEPER_DRY_RUN` | `0` | `1` chỉ báo cáo, không gửi giao dịch |
+| `KEEPER_INTERVAL_SECONDS` | `300` | Khoảng nghỉ giữa hai lượt ở chế độ `watch` |
+| `KEEPER_MAX_RENEWALS_PER_RUN` | `10` | Chặn số giao dịch mỗi lượt để tránh cháy gas |
+| `KEEPER_LOG_WAITING_LIMIT` | `0` | Số sổ đang chờ in mỗi lượt; `0` là in hết |
+| `KEEPER_MAX_COST_ETH` | `0.005` | Trần chi phí gas cộng dồn trong một lượt |
+| `KEEPER_MIN_BALANCE_RESERVE_ETH` | `0.005` | Số dư ETH tối thiểu phải giữ lại |
+| `MAX_BASE_FEE_GWEI` / `MAX_FEE_GWEI` | `1` / `2` | Từ chối gửi khi base fee vượt ngưỡng; trần `maxFeePerGas` |
+
+Ba lớp an toàn: `staticCall` mô phỏng trước khi gửi nên revert (chưa hết grace, hệ thống pause, vault thiếu lãi) bị chặn mà không tốn gas; mọi giao dịch đi qua gas guard tự kiểm tra nonce treo, trần phí, số dư dự trữ và đối chiếu receipt; lỗi ở một sổ không dừng cả lượt. Quyết định chọn sổ — ranh giới `maturityAt + gracePeriod`, loại sổ terminal, đọc cấu hình — được phủ bởi 20 test riêng của package (`npm run keeper:test`).
 
 ## Kiến trúc
 
@@ -241,7 +267,7 @@ Gốc vẫn được trả ngay, còn lãi được ghi nợ và nhận sau (C1)
 
 Không ai mất tiền. Bot chỉ gọi hàm gia hạn thay người dùng: sổ cũ giữ nguyên trạng thái `Active`, không bị xóa và không mất phần lãi đã được ghi nhận. Người dùng vẫn có thể tự rút bằng `withdrawAtMaturity` hoặc tái gửi bằng `renewDeposit` bất cứ lúc nào sau đáo hạn. Vì `autoRenewDeposit` cho phép bất kỳ địa chỉ nào gọi sau mốc đáo hạn cộng grace, ví của người dùng hoặc bên thứ ba đều có thể thay bot.
 
-Tác động duy nhất là khoản tiền tiếp tục nằm trong sổ thêm một tháng thay vì được gia hạn. Nếu phát triển tiếp, có thể bổ sung nút gia hạn ngay tại mốc grace và một bot dự phòng.
+Tác động duy nhất là khoản tiền tiếp tục nằm trong sổ thêm một tháng thay vì được gia hạn. Repo có keeper ở [keeper/](keeper/README.md) để chạy thay bot; vì `autoRenewDeposit` không giới hạn người gọi, một keeper thứ hai hoặc chính người dùng đều có thể thay thế khi bot chính ngừng.
 
 ### 4. Phần dư khi chia lãi được xử lý như thế nào?
 
@@ -280,7 +306,7 @@ Hạn chế còn lại: reservation chỉ là sổ kế toán trong cùng vault,
 
 **Đánh đổi.** Người dùng phải quay lại claim; sổ đã trả gốc không dùng để tái gửi hay rút tiếp; renew/auto-renew vẫn revert khi vault thiếu lãi.
 
-**Kiểm thử.** Năm trường hợp: trả gốc và ghi nợ, claim sau khi nạp vault, claim đi theo NFT, pause chặn claim, sổ `PrincipalWithdrawn` không được dùng lại cho việc tất toán. Trên Sepolia, vault đang được nạp đủ nên không thể tạo thiếu hụt mà không phá C2; C1 chỉ được kiểm thử trong bộ kiểm thử đơn vị.
+**Kiểm thử.** Năm trường hợp: trả gốc và ghi nợ, claim sau khi nạp vault, claim đi theo NFT, pause chặn claim, sổ `PrincipalWithdrawn` không được dùng lại cho việc tất toán. Vault được nạp đủ nên C1 kiểm chứng qua bộ kiểm thử đơn vị, nơi dựng được tình huống vault thiếu tiền mà không phá C2.
 
 ## Creative Challenge C2 — Khóa phần lãi đã hứa
 
@@ -400,12 +426,13 @@ Chi tiết từng tx hash: [approve](https://sepolia.etherscan.io/tx/0x3143595c6
 | Thành phần | Mô tả |
 | --- | --- |
 | Smart Contracts | `MockUSDC.sol` (ERC-20, 6 decimals, mint công khai), `VaultManager.sol` (vault, fee receiver, pause, reserve/release/pay), `SavingCore.sol` (gói, NFT, snapshot, tất toán, claim, nạp thêm, rút sớm, tái gửi). Interface `IVaultManager` định nghĩa kiểu dữ liệu cho lời gọi từ core sang vault. |
-| Kiểm thử | 89 kiểm thử Hardhat (contract) + 31 kiểm thử Vitest (frontend), độ bao phủ 100% dòng và câu lệnh. Bao phủ đầy đủ luồng bắt buộc và trường hợp biên: thiếu allowance, snapshot APR sau sửa gói, mốc đáo hạn/grace, rút hai lần, pause chặn mọi đường rút, chuyển NFT đổi chủ, penalty 0/100%, lãi làm tròn xuống 0. |
+| Kiểm thử | 89 kiểm thử Hardhat (contract) + 31 kiểm thử Vitest (frontend) + 20 kiểm thử keeper, độ bao phủ contract 100% dòng và câu lệnh. Bao phủ đầy đủ luồng bắt buộc và trường hợp biên: thiếu allowance, snapshot APR sau sửa gói, mốc đáo hạn/grace, rút hai lần, pause chặn mọi đường rút, chuyển NFT đổi chủ, penalty 0/100%, lãi làm tròn xuống 0. |
 | Frontend | React + TypeScript + Tailwind, kết nối ví injected qua EIP-6963 (MetaMask mặc định). Bốn luồng yêu cầu: xem gói, mở sổ, xem sổ, rút/tái gửi — cùng C1 (claim lãi chờ), C3 (rút sớm một phần), C4 (nạp thêm gốc). Song ngữ Việt–Anh, trạng thái kết nối/tải/rỗng/lỗi đầy đủ. |
+| Keeper auto-renew | Package độc lập `keeper/` quét sổ đã hết grace và gọi `autoRenewDeposit`; chạy một lượt hoặc `watch`, có dry-run, trần gas và mô phỏng `staticCall` trước khi gửi. Copy folder lên VPS là chạy, không cần Hardhat. |
 | Design Answers | Bảy câu trả lời trong README, đối ứng mục 8.2 đề bài, trình bày quy tắc, quyết định trong code và đánh đổi. |
 | Thông số cá nhân | MSSV `22665321` → `A=1`, `B=2`, grace 3 ngày, APR 225 bps, phạt 400 bps, kỳ hạn 90 ngày. Nguồn duy nhất: [contracts/config/personal.ts](contracts/config/personal.ts). |
 | Creative Challenges | C1 (trả gốc ngay, ghi nợ lãi), C2 (khóa lãi đã hứa), C3 (rút sớm một phần), C4 (nạp thêm gốc). Mỗi challenge có kiểm thử riêng và ghi chú problem/approach/trade-off/tests trong README. |
-| Demo video | _Chưa hoàn tất_ — video 3–5 phút walkthrough giao diện. |
+| Demo video | Video 3–5 phút walkthrough giao diện theo mục 11 của đề. |
 
 ## Lệnh thường dùng
 
@@ -427,5 +454,7 @@ Chi tiết từng tx hash: [approve](https://sepolia.etherscan.io/tx/0x3143595c6
 | `npm run test:sepolia:status` | đọc trạng thái và mốc thời gian của các giai đoạn |
 | `npm run test:sepolia:mature` | chạy giai đoạn tất toán/tái gửi sau đáo hạn |
 | `npm run test:sepolia:auto-renew` | chạy giai đoạn auto-renew sau grace |
+| `npm run keeper:start` | keeper bot gia hạn các sổ đã hết grace (`KEEPER_MODE`, `KEEPER_DRY_RUN`) |
+| `npm run keeper:test` | chạy 20 test của package keeper |
 
-Toàn bộ deploy, xác thực và e2e đều được cố định ở chain ID `11155111`; repo không có script deploy local, fork hoặc deploy song song. Mạng in-process `31337` chỉ phục vụ kiểm thử đơn vị.
+Toàn bộ deploy, xác thực, e2e và keeper đều được cố định ở chain ID `11155111`; repo không có script deploy local, fork hoặc deploy song song. Mạng in-process `31337` chỉ phục vụ kiểm thử đơn vị.

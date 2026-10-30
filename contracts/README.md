@@ -100,14 +100,32 @@ npm run testnet:e2e:auto-renew
 
 Script không time-travel và không fork; nếu chưa tới mốc thời gian thật, nó in mốc sớm nhất và không gửi giao dịch. Mọi giao dịch đi qua gas guard với cap `MAX_E2E_COST_ETH`.
 
+## Keeper tự động gia hạn
+
+Keeper cho `autoRenewDeposit` (mục 3.5 của đề) **không còn nằm trong package này**. Nó là package độc lập ở [`../keeper`](../keeper/README.md): không import Hardhat hay artifact, chỉ cần Node và một RPC endpoint, nên copy nguyên folder lên VPS/PaaS là chạy.
+
+Lý do tách: bot phải deploy được mà không kéo theo Hardhat và bộ contract; và khóa của bot không nên nằm cùng chỗ với khóa deploy.
+
+```powershell
+cd ../keeper
+npm install
+npm start                                   # một lượt
+KEEPER_DRY_RUN=1 npm start                  # chỉ in, không gửi giao dịch
+KEEPER_MODE=watch npm start                 # lặp theo interval
+```
+
+Địa chỉ contract: đặt `CORE_ADDRESS`/`VAULT_ADDRESS`/`USDC_ADDRESS`, hoặc để trống và keeper đọc `deployments/testnet.json` qua `MANIFEST_PATH`. Xem bảng biến đầy đủ trong [`../keeper/README.md`](../keeper/README.md).
+
 ## Test
 
-Lần chạy gần nhất (2026-10-29):
+Lần chạy gần nhất (2026-10-30):
 
 ```text
-74 passing
+89 passing
 Total 100.00% lines / 100.00% statements
 ```
+
+Test của keeper nằm ở package riêng: `npm --prefix keeper test` (20 trường hợp).
 
 Các nhóm đã phủ:
 

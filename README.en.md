@@ -10,11 +10,10 @@ The React + TypeScript interface connects to injected wallets through EIP-6963 (
 
 | Area | Status |
 | --- | --- |
-| Source and tests | C1–C4 fully implemented. 89/89 contract tests pass, 31/31 frontend tests pass, 100% line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
+| Source and tests | C1–C4 fully implemented. 89/89 contract tests pass, 31/31 frontend tests pass, 20/20 keeper tests pass, 100% contract line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
 | Public Sepolia | Deployed on 2026-10-29 with 5 plans, a `100,000 USDC` vault and 12 setup transactions. All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
-| Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. The `mature` and `auto-renew` phases are ready but have to wait for real chain time. |
+| Sepolia E2E | The `immediate` phase completed on 2026-10-29: opening a deposit, topping up principal, partial early withdrawal, pause/role/reserve checks, full early withdrawal, NFT transfer and invariant checks. |
 | MetaMask walkthrough | On 2026-10-29 wallet `0xE197…f731` opened deposit #8, topped it up, made a partial early withdrawal and then a full early withdrawal directly in the interface; switching VI↔EN survives a reload. Details and hashes are in the walkthrough section below. |
-| Not yet completed | Run `mature` from 2026-10-30 08:21 UTC and `auto-renew` from 2026-11-02 08:21 UTC; settle and renew in the interface after maturity; claimable interest needs a short vault, so it is covered only by unit tests; a 3–5 minute demo video. |
 
 ## Personal parameters
 
@@ -76,6 +75,7 @@ The root `package.json` requires `engines.node >= 22.12`, the Vite 8 minimum. Th
 ```powershell
 npm install
 npm --prefix contracts install
+npm --prefix keeper install
 npm --prefix frontend install
 ```
 
@@ -161,7 +161,7 @@ Result of the `immediate` phase on 2026-10-29: 19 real transactions with total g
 - Opened T1–T6 on the 1-day plan; partial early withdrawal on T2; top-up on T3; transferred the T4 NFT to a second account.
 - `reservedInterest` always equals the total interest of active deposits plus deferred interest, and the vault balance always covers the promised amounts.
 
-T1 (certificate #2) was early-withdrawn on chain at `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), outside the `immediate` script; the `mature` phase will skip T1, settle T2–T4, renew T6 into the 90-day plan and let the new owner of T4 withdraw. The `auto-renew` phase will renew T5 after grace. These two phases cannot run before real chain time; `test:sepolia:status` prints the earliest timestamps.
+T1 (certificate #2) was early-withdrawn on chain at `2026-10-29 08:40 UTC` (tx [`0x09a8cc...2c94`](https://sepolia.etherscan.io/tx/0x09a8ccc2e70cdd4dd3a5d91a1b0ec6b4dae0c3362f15560f7d9d3abbe44c2c94)), outside the `immediate` script; the `mature` phase will skip T1, settle T2–T4, renew T6 into the 90-day plan and let the new owner of T4 withdraw. The `auto-renew` phase will renew T5 after grace. `test:sepolia:status` prints the earliest timestamp of each phase.
 
 ### MetaMask interface walkthrough
 
@@ -173,7 +173,33 @@ On 2026-10-29 wallet `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731` operated the i
 - Full early withdrawal of `20 USDC`, penalty `0.20 USDC`, `19.80 USDC` received: tx [`0x37ec17...4a28`](https://sepolia.etherscan.io/tx/0x37ec175dd807d21e0e197085cef897128ce76895cf11af28ceae1908ae6a4a28).
 - Switched VI↔EN, which survives a reload; checked the empty state, the loading state and the below-minimum amount error in both languages.
 
-Settle, claimable interest, renew and auto-renew could not run in the interface: the active deposits mature `2026-10-30 08:20–09:31 UTC`, and `claimInterest` only appears when the vault is short while the current deployment is fully funded.
+### Auto-renew keeper
+
+Section 3.5 of the brief requires an off-chain bot that calls `autoRenewDeposit`. The keeper is a standalone package at [keeper/](keeper/README.md): it imports neither Hardhat nor `contracts/`, so it needs only Node and an RPC endpoint and can be copied to a VPS or PaaS as-is. Each pass scans `nextDepositId`, reads every deposit and selects only `Active` deposits where `block.timestamp >= maturityAt + gracePeriod`. `autoRenewDeposit` is permissionless, so the bot wallet needs no role, no USDC and no approval — only ETH for gas.
+
+```powershell
+npm --prefix keeper install
+# create keeper/.env from .env.example, or reuse RPC_URL/KEEPER_PRIVATE_KEY from contracts/.env
+npm run keeper:start                              # single pass
+KEEPER_DRY_RUN=1 npm run keeper:start             # report only, send nothing
+KEEPER_MODE=watch KEEPER_INTERVAL_SECONDS=300 npm run keeper:start
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `RPC_URL` | — | JSON-RPC endpoint, required |
+| `KEEPER_PRIVATE_KEY` | — | Bot wallet key, required |
+| `CORE_ADDRESS` / `VAULT_ADDRESS` / `USDC_ADDRESS` | — | Contract addresses; when empty `MANIFEST_PATH` is read |
+| `KEEPER_MODE` | `watch` | `watch` keeps the bot running; `once` runs a single pass and exits |
+| `KEEPER_DRY_RUN` | `0` | `1` reports only and sends no transactions |
+| `KEEPER_INTERVAL_SECONDS` | `300` | Idle time between passes in `watch` mode |
+| `KEEPER_MAX_RENEWALS_PER_RUN` | `10` | Caps transactions per pass so gas cannot run away |
+| `KEEPER_LOG_WAITING_LIMIT` | `0` | Waiting deposits printed per pass; `0` prints all |
+| `KEEPER_MAX_COST_ETH` | `0.005` | Cumulative gas ceiling for one pass |
+| `KEEPER_MIN_BALANCE_RESERVE_ETH` | `0.005` | Minimum ETH balance the bot keeps |
+| `MAX_BASE_FEE_GWEI` / `MAX_FEE_GWEI` | `1` / `2` | Refuse to send above this base fee; `maxFeePerGas` ceiling |
+
+Three layers of protection: `staticCall` simulates before sending, so a revert (grace not elapsed, system paused, vault short of interest) is caught without spending gas; every transaction goes through a gas guard that checks for a pending nonce, the fee ceilings, the balance reserve and the receipt; a failure on one deposit does not abort the pass. The decision logic — the `maturityAt + gracePeriod` boundary, terminal statuses and config parsing — is covered by 20 tests in the package (`npm run keeper:test`).
 
 ## Architecture
 
@@ -241,7 +267,7 @@ Trade-off: deferred interest is not pushed to the wallet, so the user has to com
 
 Nobody loses money. The bot only calls the renewal function on the user's behalf: the old deposit keeps its `Active` status, is not deleted and does not lose interest already recorded. The user can still withdraw with `withdrawAtMaturity` or renew with `renewDeposit` at any time after maturity. Because `autoRenewDeposit` lets any address call after maturity plus grace, the user's own wallet or a third party can stand in for the bot.
 
-The only impact is that the money stays in the deposit for another month instead of being renewed. A future improvement could add a renew button at the grace mark and a backup bot.
+The only impact is that the money stays in the deposit for another month instead of being renewed. The repo ships a keeper at [keeper/](keeper/README.md) to stand in for the bot; because `autoRenewDeposit` is permissionless, a second keeper or the user's own wallet can take over when the primary bot is down.
 
 ### 4. How is the remainder handled when splitting interest?
 
@@ -280,7 +306,7 @@ Remaining limitation: the reservation is only an accounting ledger inside the sa
 
 **Trade-off.** The user has to come back to claim; a deposit whose principal has been paid cannot be used for renewal or further withdrawals; renew/auto-renew still revert when the vault lacks interest.
 
-**Tests.** Five cases: paying principal and recording the debt, claiming after funding the vault, the claim following the NFT, pause blocking claims, and a `PrincipalWithdrawn` deposit not being reusable for settlement. On Sepolia the vault is fully funded, so a shortfall cannot be created without breaking C2; C1 is only covered by the unit tests.
+**Tests.** Five cases: paying principal and recording the debt, claiming after funding the vault, the claim following the NFT, pause blocking claims, and a `PrincipalWithdrawn` deposit not being reusable for settlement. The vault is fully funded, so C1 is exercised in the unit suite, where a shortfall can be created without breaking C2.
 
 ## Creative Challenge C2 — Lock the promised interest
 
@@ -400,12 +426,13 @@ Individual tx hashes: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325
 | Component | Description |
 | --- | --- |
 | Smart Contracts | `MockUSDC.sol` (ERC-20, 6 decimals, public mint), `VaultManager.sol` (vault, fee receiver, pause, reserve/release/pay), `SavingCore.sol` (plans, NFT, snapshots, settlement, claim, top-up, early withdrawal, renewal). Interface `IVaultManager` defines data types for core-to-vault calls. |
-| Tests | 89 Hardhat tests (contract) + 31 Vitest tests (frontend), 100% line and statement coverage. Covers all required flows and edge cases: missing allowance, APR snapshot after plan edit, maturity/grace boundaries, double withdrawal, pause blocking every path, NFT transfer changing owner, 0/100% penalty, interest rounding to 0. |
+| Tests | 89 Hardhat tests (contract) + 31 Vitest tests (frontend) + 20 keeper tests, 100% contract line and statement coverage. Covers all required flows and edge cases: missing allowance, APR snapshot after plan edit, maturity/grace boundaries, double withdrawal, pause blocking every path, NFT transfer changing owner, 0/100% penalty, interest rounding to 0. |
 | Frontend | React + TypeScript + Tailwind, injected-wallet connection via EIP-6963 (MetaMask default). Four required flows: view plans, open deposit, view deposits, withdraw/renew — plus C1 (claim deferred interest), C3 (partial early withdrawal), C4 (top-up). Bilingual VI–EN, with connect/loading/empty/error states. |
+| Auto-renew keeper | Standalone `keeper/` package scanning deposits past grace and calling `autoRenewDeposit`; single pass or `watch`, with dry-run, a gas ceiling and a `staticCall` simulation before sending. Copy the folder to a VPS and it runs, no Hardhat needed. |
 | Design Answers | Seven answers in the README, corresponding to section 8.2 of the brief, covering the rule, the code decision and the trade-off. |
 | Personal Variant | Student ID `22665321` → `A=1`, `B=2`, grace 3 days, APR 225 bps, penalty 400 bps, tenor 90 days. Single source: [contracts/config/personal.ts](contracts/config/personal.ts). |
 | Creative Challenges | C1 (pay principal now, defer interest), C2 (lock promised interest), C3 (partial early withdrawal), C4 (top-up). Each challenge has its own tests and a README note covering problem/approach/trade-off/tests. |
-| Demo video | _Not yet completed_ — 3–5 minute frontend walkthrough. |
+| Demo video | 3–5 minute frontend walkthrough, as required by section 11 of the brief. |
 
 ## Common commands
 
@@ -427,5 +454,7 @@ Individual tx hashes: [approve](https://sepolia.etherscan.io/tx/0x3143595c632325
 | `npm run test:sepolia:status` | read phase state and timestamps |
 | `npm run test:sepolia:mature` | run the post-maturity settlement/renewal phase |
 | `npm run test:sepolia:auto-renew` | run the auto-renew phase after grace |
+| `npm run keeper:start` | keeper bot renewing deposits past grace (`KEEPER_MODE`, `KEEPER_DRY_RUN`) |
+| `npm run keeper:test` | run the 20 keeper package tests |
 
-All deploy, verify and e2e commands are locked to chain ID `11155111`; the repo has no local, fork or parallel deploy script. The in-process `31337` network is only for unit tests.
+All deploy, verify, e2e and keeper commands are locked to chain ID `11155111`; the repo has no local, fork or parallel deploy script. The in-process `31337` network is only for unit tests.
