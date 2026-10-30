@@ -18,6 +18,7 @@ import {
 import { DEPLOYMENT_PLANS, NEXT_PLAN_ID } from "../../config/plans";
 import {
   DeploymentJournal,
+  alignedNonces,
   applyGasLimitMultiplier,
   assertBalance,
   assertCumulative,
@@ -47,12 +48,17 @@ export function deploymentsDir(): string {
   return path.join(SCRIPT_DIR, "..", "..", "deployments");
 }
 
+// Static limits because public RPCs inflate estimateGas. They are sized from the
+// gas actually used on Sepolia, which runs a newer fork than the in-process
+// Hardhat network: the same calls cost 2.5x-3.9x more there (setCoreOnce 99k
+// local vs 358k on chain). Sizing them from local numbers makes the setup fail
+// with out-of-gas on the real chain.
 export const SETUP_GAS_LIMITS = {
-  setCoreOnce: 150_000n,
-  mint: 100_000n,
-  approveVault: 90_000n,
-  fundVault: 100_000n,
-  createPlan: 220_000n,
+  setCoreOnce: 450_000n,
+  mint: 300_000n,
+  approveVault: 165_000n,
+  fundVault: 190_000n,
+  createPlan: 600_000n,
 } as const;
 
 type HardhatEthers = Awaited<ReturnType<typeof network.create>>["ethers"];
@@ -120,6 +126,43 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+/**
+ * Retries a read-only call a few times so a lagging RPC node cannot be mistaken
+ * for a contract-level revert.
+ */
+async function retryCall<T>(call: () => Promise<T>, attempts = 4, delayMs = 2_500): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await call();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Public RPC endpoints are load balanced, so a read issued right after a deploy
+ * can land on a node that has not seen the new block yet and reports empty code.
+ * Poll until the runtime code is visible before configuring the contract.
+ */
+async function waitForCode(
+  provider: { getCode: (address: string) => Promise<string> },
+  address: string,
+  attempts = 20,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const code = await provider.getCode(address);
+    if (code && code !== "0x") return;
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+  fail(`No code at ${address} after deployment; the RPC endpoint is lagging.`);
+}
+
 async function preflight(ethers: HardhatEthers, networkName: string): Promise<Prepared> {
   if (networkName !== TESTNET_NETWORK) {
     fail(`Deployment is locked to ${TESTNET_NETWORK}; running on ${networkName}.`);
@@ -140,14 +183,13 @@ async function preflight(ethers: HardhatEthers, networkName: string): Promise<Pr
   const feeReceiver = configuredFeeReceiver ? getAddress(configuredFeeReceiver) : deployerAddress;
 
   const policy = loadGasPolicy();
-  const [block, feeData, latestNonce, pendingNonce, balanceWei] = await Promise.all([
+  const [block, feeData, balanceWei] = await Promise.all([
     provider.getBlock("latest"),
     provider.getFeeData(),
-    provider.getTransactionCount(deployerAddress, "latest"),
-    provider.getTransactionCount(deployerAddress, "pending"),
     provider.getBalance(deployerAddress),
   ]);
   if (!block) fail("The RPC did not return a latest block.");
+  const { latestNonce, pendingNonce } = await alignedNonces(provider, deployerAddress);
   assertNonce(latestNonce, pendingNonce);
 
   const quote = quoteFees(block.baseFeePerGas, feeData.maxPriorityFeePerGas, policy);
@@ -344,6 +386,8 @@ export async function runDeploy(options: { dryRun: boolean }): Promise<Deploymen
     });
     const address = result.receipt.contractAddress;
     if (!address) fail(`${estimate.name} deployment produced no contract address.`);
+    await waitForCode(prepared.provider, address);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
     deployed[estimate.name] = await prepared.ethers.getContractAt(estimate.name, address, prepared.deployer);
 
     spentWei += result.costWei;
@@ -359,7 +403,9 @@ export async function runDeploy(options: { dryRun: boolean }): Promise<Deploymen
   ): Promise<void> => {
     // Public RPCs inflate estimateGas far beyond real usage, so setup uses measured static limits.
     const to = String(contract.target);
-    await contract.getFunction(method).staticCall(...args);
+    // Load-balanced endpoints can still be missing the contract the previous step
+    // deployed, which shows up as a bogus revert. Retry before trusting the result.
+    await retryCall(() => contract.getFunction(method).staticCall(...args));
     const data = contract.interface.encodeFunctionData(method, args);
 
     const result = await sendGuardedTx({

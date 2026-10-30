@@ -7,7 +7,11 @@ import { SETUP_GAS_LIMITS } from "../scripts/lib/deploy-core";
 
 const USDC = (whole: number) => parseUnits(String(whole), 6);
 const MIN_HEADROOM_BPS = 11_500n;
-const MAX_HEADROOM_BPS = 20_000n;
+// Sepolia runs a newer fork than the in-process network and charges 2.5x-3.9x
+// more for the same setup calls, so the static limits are sized from the chain
+// rather than from this measurement. The upper bound only guards against a
+// runaway constant; the lower bound is the one that protects against OOG.
+const MAX_HEADROOM_BPS = 60_000n;
 
 const { ethers } = await network.create();
 
@@ -75,7 +79,7 @@ describe("deployment gas limits", function () {
       );
       expect(limit).to.be.lessThanOrEqual(
         (gasUsed * MAX_HEADROOM_BPS) / 10_000n,
-        `${name} static limit is more than double the measured gas`,
+        `${name} static limit is more than six times the measured gas`,
       );
     }
   });

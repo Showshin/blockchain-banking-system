@@ -221,6 +221,34 @@ export function assertNonce(latestNonce: number, pendingNonce: number): void {
   }
 }
 
+/**
+ * Load-balanced RPC endpoints can report the pending count one ahead of the
+ * latest count right after a transaction is mined. Poll until both agree so a
+ * healthy sequence is not mistaken for a stuck one.
+ */
+export async function alignedNonces(
+  provider: {
+    getTransactionCount: (address: string, blockTag?: "latest" | "pending") => Promise<number>;
+  },
+  address: string,
+  attempts = 10,
+  delayMs = 1_500,
+): Promise<{ latestNonce: number; pendingNonce: number }> {
+  let latestNonce = 0;
+  let pendingNonce = 0;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    [latestNonce, pendingNonce] = await Promise.all([
+      provider.getTransactionCount(address, "latest"),
+      provider.getTransactionCount(address, "pending"),
+    ]);
+    if (latestNonce === pendingNonce) break;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  return { latestNonce, pendingNonce };
+}
+
 export function assertCumulative(spentWei: bigint, nextWorstCaseWei: bigint, capWei: bigint): void {
   if (spentWei + nextWorstCaseWei > capWei) {
     throw new GasPolicyError("COST_CAP", "The cumulative gas cost would exceed the configured cap.", {
@@ -326,10 +354,7 @@ export async function sendGuardedTx(args: {
   quote: FeeQuote;
 }> {
   const signerAddress = await args.signer.getAddress();
-  const [latestNonce, pendingNonce] = await Promise.all([
-    args.provider.getTransactionCount(signerAddress, "latest"),
-    args.provider.getTransactionCount(signerAddress, "pending"),
-  ]);
+  const { latestNonce, pendingNonce } = await alignedNonces(args.provider, signerAddress);
   assertNonce(latestNonce, pendingNonce);
 
   const quote = await readFeeQuote(args.provider, args.policy);
