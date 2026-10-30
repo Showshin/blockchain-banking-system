@@ -5,6 +5,8 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IVaultManager} from "./interfaces/IVaultManager.sol";
@@ -18,6 +20,14 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
 
     uint16 private constant MAX_BPS = 10_000;
     uint256 private constant SECONDS_PER_YEAR = 365 days;
+
+    /// @dev Tier artwork on IPFS. Five seals cover every possible tenor, so a new
+    ///      plan never needs a new image and this URI never changes.
+    string private constant BASE_IMAGE_URI =
+        "https://plum-negative-aardwolf-541.mypinata.cloud/ipfs/bafybeibkfr24msv7lvcpcb5rfykrn2yrfyoq4xar37rfbnxklkkzllo6kq/";
+
+    string private constant DESCRIPTION =
+        "On-chain term-deposit certificate issued by TICH. The principal is held by SavingCore and the promised interest is reserved in VaultManager.";
 
     enum DepositStatus {
         None,
@@ -373,6 +383,119 @@ contract SavingCore is ERC721, AccessControl, ReentrancyGuard {
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    /// @notice A certificate can change hands only while its deposit is open.
+    /// @dev Once the deposit is closed (settled at maturity, withdrawn early, or
+    ///      renewed) the certificate is a record, not a claim, so it stays put.
+    function isTransferable(uint256 tokenId) public view returns (bool) {
+        _requireOwned(tokenId);
+        return deposits[tokenId].status == DepositStatus.Active;
+    }
+
+    /// @notice Certificates ever issued. Nothing is burned, so this is also the
+    ///         current supply and the number explorer pages ask for.
+    function totalSupply() external view returns (uint256) {
+        return nextDepositId - 1;
+    }
+
+    /// @dev Minting skips the lock; every change of holder is gated.
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override
+        returns (address)
+    {
+        address from = _ownerOf(tokenId);
+        if (from != address(0)) {
+            require(deposits[tokenId].status == DepositStatus.Active, "Core: certificate locked");
+        }
+        return super._update(to, tokenId, auth);
+    }
+
+    /// @notice ERC-721 metadata: a name, the tier artwork on IPFS and the deposit traits.
+    /// @dev The image is derived from the tenor snapshot, never from the live plan, so
+    ///      editing a plan cannot change an existing certificate.
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        _requireOwned(tokenId);
+        Deposit storage deposit = deposits[tokenId];
+
+        string memory image = string.concat(
+            BASE_IMAGE_URI,
+            _artName(deposit.tenorDays, deposit.status),
+            ".svg"
+        );
+
+        string memory head = string.concat(
+            '{"name":"TICH Deposit Certificate #',
+            _pad4(tokenId),
+            '","description":"',
+            DESCRIPTION,
+            '","image":"',
+            image,
+            '","attributes":['
+        );
+        string memory json = string.concat(head, _attributes(deposit), "]}");
+
+        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+    }
+
+    /// @dev A closed certificate keeps its artwork slot but uses the grey seal.
+    function _artName(uint32 tenorDays, DepositStatus status) private pure returns (string memory) {
+        if (status != DepositStatus.Active) return "closed";
+        return _tierName(tenorDays);
+    }
+
+    /// @dev Tier thresholds must mirror frontend/src/lib/seal.ts (sealTierFor).
+    function _tierName(uint32 tenorDays) private pure returns (string memory) {
+        if (tenorDays <= 1) return "bronze";
+        if (tenorDays <= 30) return "silver";
+        if (tenorDays <= 90) return "gold";
+        if (tenorDays <= 180) return "diamond";
+        return "emerald";
+    }
+
+    function _statusName(DepositStatus status) private pure returns (string memory) {
+        if (status == DepositStatus.Active) return "Active";
+        if (status == DepositStatus.PrincipalWithdrawn) return "Interest pending";
+        if (status == DepositStatus.Withdrawn) return "Settled";
+        if (status == DepositStatus.ManualRenewed) return "Renewed";
+        return "Auto renewed";
+    }
+
+    /// @dev Left-pads to four digits so every certificate number has a stable width.
+    ///      Longer ids pass through unchanged.
+    function _pad4(uint256 value) private pure returns (string memory) {
+        bytes memory digits = bytes(Strings.toString(value));
+        uint256 pad = digits.length < 4 ? 4 - digits.length : 0;
+        bytes memory out = new bytes(pad + digits.length);
+        for (uint256 i = 0; i < pad; i++) {
+            out[i] = "0";
+        }
+        for (uint256 i = 0; i < digits.length; i++) {
+            out[pad + i] = digits[i];
+        }
+        return string(out);
+    }
+
+    function _attributes(Deposit storage deposit) private view returns (string memory) {
+        string memory first = string.concat(
+            '{"trait_type":"Tier","value":"',
+            _tierName(deposit.tenorDays),
+            '"},{"trait_type":"Tenor (days)","value":',
+            Strings.toString(deposit.tenorDays),
+            '},{"trait_type":"APR (bps)","value":',
+            Strings.toString(deposit.aprBpsAtOpen)
+        );
+        string memory second = string.concat(
+            '},{"trait_type":"Principal (units)","value":"',
+            Strings.toString(deposit.principal),
+            '"},{"trait_type":"Matures (unix)","value":',
+            Strings.toString(deposit.maturityAt),
+            '},{"trait_type":"Status","value":"',
+            _statusName(deposit.status),
+            '"}'
+        );
+        return string.concat(first, second);
     }
 
     function _createDeposit(

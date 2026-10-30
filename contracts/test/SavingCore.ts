@@ -575,7 +575,7 @@ describe("SavingCore", function () {
       );
     });
 
-    it("moves the deferred interest claim with the certificate", async function () {
+    it("keeps the deferred interest claim with the locked certificate", async function () {
       const { core, token, vault, admin, depositor, recipient, outsider } = await loadFixture(
         deployBankFixture,
       );
@@ -584,19 +584,24 @@ describe("SavingCore", function () {
       await drainVault(vault, token, outsider.address);
       await time.increaseTo(Number(deposit.maturityAt));
       await withSigner(core, depositor).withdrawAtMaturity(depositId);
-      await withSigner(core, depositor).transferFrom(
-        depositor.address,
-        recipient.address,
-        depositId,
-      );
-      await withSigner(vault, admin).fundVault(USDC(100));
 
-      await expect(withSigner(core, depositor).claimInterest(depositId)).to.be.revertedWith(
+      // The principal is back, so the certificate is closed and can no longer move.
+      expect(await core.isTransferable(depositId)).to.equal(false);
+      await expect(
+        withSigner(core, depositor).transferFrom(
+          depositor.address,
+          recipient.address,
+          depositId,
+        ),
+      ).to.be.revertedWith("Core: certificate locked");
+
+      await withSigner(vault, admin).fundVault(USDC(100));
+      await expect(withSigner(core, recipient).claimInterest(depositId)).to.be.revertedWith(
         "Core: not certificate owner",
       );
-      await expect(withSigner(core, recipient).claimInterest(depositId))
+      await expect(withSigner(core, depositor).claimInterest(depositId))
         .to.emit(core, "InterestClaimed")
-        .withArgs(depositId, recipient.address, interest);
+        .withArgs(depositId, depositor.address, interest);
     });
 
     it("blocks claiming deferred interest while paused", async function () {
@@ -915,6 +920,241 @@ describe("SavingCore", function () {
       await time.increaseTo(Number(deposit.maturityAt));
       await withSigner(core, depositor).withdrawAtMaturity(depositId);
       expect(await token.balanceOf(depositor.address)).to.equal(before);
+    });
+  });
+
+  describe("certificate metadata", () => {
+    const BASE =
+      "https://plum-negative-aardwolf-541.mypinata.cloud/ipfs/bafybeibkfr24msv7lvcpcb5rfykrn2yrfyoq4xar37rfbnxklkkzllo6kq/";
+
+    type Metadata = {
+      name: string;
+      description: string;
+      image: string;
+      attributes: { trait_type: string; value: string | number }[];
+    };
+
+    function decode(uri: string): Metadata {
+      return JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString("utf8")) as Metadata;
+    }
+
+    function traits(json: Metadata): Record<string, string | number> {
+      return Object.fromEntries(json.attributes.map((item) => [item.trait_type, item.value]));
+    }
+
+    it("returns base64 JSON with the name, tier artwork and deposit traits", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+
+      const uri = (await core.tokenURI(depositId)) as string;
+      expect(uri.startsWith("data:application/json;base64,")).to.equal(true);
+
+      const json = decode(uri);
+      expect(json.name).to.equal("TICH Deposit Certificate #0001");
+      expect(json.image).to.equal(BASE + "gold.svg");
+      expect(json.description).to.contain("TICH");
+
+      const values = traits(json);
+      expect(values.Tier).to.equal("gold");
+      expect(values["Tenor (days)"]).to.equal(90);
+      expect(values["APR (bps)"]).to.equal(225);
+      expect(values["Principal (units)"]).to.equal("1000000000");
+      expect(values.Status).to.equal("Active");
+    });
+
+    it("pads the certificate number to four digits", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      for (let i = 0; i < 9; i += 1) {
+        await openDeposit(core, depositor, USDC(1_000));
+      }
+      const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+
+      expect(depositId).to.equal(10n);
+      expect(decode((await core.tokenURI(depositId)) as string).name).to.equal(
+        "TICH Deposit Certificate #0010",
+      );
+    });
+
+    it("maps every tenor band to its tier artwork", async () => {
+      const { core, admin, depositor } = await loadFixture(deployBankFixture);
+      const cases: [number, string][] = [
+        [1, "bronze"],
+        [30, "silver"],
+        [90, "gold"],
+        [180, "diamond"],
+        [365, "emerald"],
+      ];
+
+      for (const [tenor, tier] of cases) {
+        const planId = (await core.nextPlanId()) as bigint;
+        await withSigner(core, admin).createPlan(tenor, 100, USDC(1), 0, 100);
+        const { depositId } = await openDeposit(core, depositor, USDC(10), planId);
+
+        const json = decode((await core.tokenURI(depositId)) as string);
+        expect(json.image).to.equal(BASE + tier + ".svg");
+        expect(traits(json).Tier).to.equal(tier);
+      }
+    });
+
+    it("labels a settled certificate", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      const json = decode((await core.tokenURI(depositId)) as string);
+      expect(traits(json).Status).to.equal("Settled");
+    });
+
+    it("labels a certificate whose interest is still pending", async () => {
+      const { core, token, vault, depositor, outsider } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await drainVault(vault, token, outsider.address);
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      const json = decode((await core.tokenURI(depositId)) as string);
+      expect(traits(json).Status).to.equal("Interest pending");
+    });
+
+    it("labels renewed and auto-renewed certificates", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(deposit.maturityAt));
+
+      const renewedId = (await core.nextDepositId()) as bigint;
+      await withSigner(core, depositor).renewDeposit(depositId, 1n);
+      expect(traits(decode((await core.tokenURI(depositId)) as string)).Status).to.equal("Renewed");
+      expect(traits(decode((await core.tokenURI(renewedId)) as string)).Status).to.equal("Active");
+
+      const auto = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(auto.deposit.maturityAt) + Number(GRACE_PERIOD_SECONDS) + 1);
+      await withSigner(core, depositor).autoRenewDeposit(auto.depositId);
+      expect(traits(decode((await core.tokenURI(auto.depositId)) as string)).Status).to.equal(
+        "Auto renewed",
+      );
+    });
+
+    it("reverts for a certificate that does not exist", async () => {
+      const { core } = await loadFixture(deployBankFixture);
+      await expect(core.tokenURI(999)).to.be.revertedWithCustomError(
+        core,
+        "ERC721NonexistentToken",
+      );
+    });
+
+    it("switches to the grey seal once the certificate is closed", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      expect(decode((await core.tokenURI(depositId)) as string).image).to.equal(
+        BASE + "gold.svg",
+      );
+
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      expect(decode((await core.tokenURI(depositId)) as string).image).to.equal(
+        BASE + "closed.svg",
+      );
+    });
+  });
+
+  describe("certificate transfer lock", () => {
+    it("lets an open certificate change hands", async () => {
+      const { core, depositor, recipient } = await loadFixture(deployBankFixture);
+      const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+
+      expect(await core.isTransferable(depositId)).to.equal(true);
+      await withSigner(core, depositor).transferFrom(
+        depositor.address,
+        recipient.address,
+        depositId,
+      );
+      expect(await core.ownerOf(depositId)).to.equal(recipient.address);
+    });
+
+    it("locks the certificate once it is settled at maturity", async () => {
+      const { core, depositor, recipient } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      expect(await core.isTransferable(depositId)).to.equal(false);
+      await expect(
+        withSigner(core, depositor).transferFrom(
+          depositor.address,
+          recipient.address,
+          depositId,
+        ),
+      ).to.be.revertedWith("Core: certificate locked");
+    });
+
+    it("locks the certificate after a full early withdrawal", async () => {
+      const { core, depositor, recipient } = await loadFixture(deployBankFixture);
+      const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+      await withSigner(core, depositor).earlyWithdraw(depositId);
+
+      expect(await core.isTransferable(depositId)).to.equal(false);
+      await expect(
+        withSigner(core, depositor).transferFrom(
+          depositor.address,
+          recipient.address,
+          depositId,
+        ),
+      ).to.be.revertedWith("Core: certificate locked");
+    });
+
+    it("keeps a partially withdrawn certificate transferable", async () => {
+      const { core, depositor, recipient } = await loadFixture(deployBankFixture);
+      const { depositId } = await openDeposit(core, depositor, USDC(1_000));
+      await withSigner(core, depositor).earlyWithdrawPartial(depositId, USDC(400));
+
+      expect(await core.isTransferable(depositId)).to.equal(true);
+      await withSigner(core, depositor).transferFrom(
+        depositor.address,
+        recipient.address,
+        depositId,
+      );
+      expect(await core.ownerOf(depositId)).to.equal(recipient.address);
+    });
+
+    it("locks a certificate whose interest is still pending", async () => {
+      const { core, token, vault, depositor, recipient, outsider } =
+        await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await drainVault(vault, token, outsider.address);
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      expect((await core.deposits(depositId)).status).to.equal(PRINCIPAL_WITHDRAWN);
+      expect(await core.isTransferable(depositId)).to.equal(false);
+      await expect(
+        withSigner(core, depositor).transferFrom(
+          depositor.address,
+          recipient.address,
+          depositId,
+        ),
+      ).to.be.revertedWith("Core: certificate locked");
+    });
+  });
+
+  describe("certificate supply", () => {
+    it("counts every issued certificate", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      expect(await core.totalSupply()).to.equal(0n);
+
+      await openDeposit(core, depositor, USDC(1_000));
+      await openDeposit(core, depositor, USDC(1_000));
+      expect(await core.totalSupply()).to.equal(2n);
+    });
+
+    it("keeps counting a certificate after it is settled", async () => {
+      const { core, depositor } = await loadFixture(deployBankFixture);
+      const { depositId, deposit } = await openDeposit(core, depositor, USDC(1_000));
+      await time.increaseTo(Number(deposit.maturityAt));
+      await withSigner(core, depositor).withdrawAtMaturity(depositId);
+
+      expect(await core.totalSupply()).to.equal(1n);
     });
   });
 });
