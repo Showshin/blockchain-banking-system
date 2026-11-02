@@ -19,7 +19,7 @@ const ANNOUNCE_EVENT = 'eip6963:announceProvider'
 const REQUEST_EVENT = 'eip6963:requestProvider'
 const FALLBACK_CHAIN_ID = 11155111
 const SEPOLIA_RPC_URL =
-  import.meta.env.VITE_SEPOLIA_RPC_URL ?? 'https://ethereum-sepolia-rpc.publicnode.com'
+  import.meta.env.VITE_SEPOLIA_RPC_URL?.trim() || 'https://ethereum-sepolia-rpc.publicnode.com'
 
 let active: WalletInfo | null = null
 let listening = false

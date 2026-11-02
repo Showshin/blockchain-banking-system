@@ -1,4 +1,4 @@
-import { ArrowRight, WarningCircle } from '@phosphor-icons/react'
+import { CaretRight, WarningCircle } from '@phosphor-icons/react'
 import { useMemo, useState } from 'react'
 import { useI18n } from '../i18n/lang'
 import { isClaimable, isMatured, maturityFor, penaltyFor, topUpInterestFor } from '../lib/bank'
@@ -126,6 +126,16 @@ export function ActionDialog({
         : mode === 'topup'
           ? copy.newPrincipalAfterTopUp
           : copy.claimAmount
+
+  // A compounded principal can be long enough to run into the metrics column,
+  // so the hero number steps down instead of overflowing.
+  const heroText = money(heroValue)
+  const heroSize =
+    heroText.length >= 13
+      ? 'text-[1.2rem]'
+      : heroText.length >= 10
+        ? 'text-[1.45rem]'
+        : 'text-[clamp(1.5rem,4.8vw,1.9rem)]'
 
   const expectedText = copy.confirmPhrase(deposit.certificateNo)
   const isConfirmationMatched = !isEarly || confirmInput.trim().toLowerCase() === expectedText.toLowerCase()
@@ -297,11 +307,16 @@ export function ActionDialog({
         <div className="mt-4 rounded-[18px] bg-contrast p-4 text-on-contrast">
           <div className="flex items-end justify-between gap-4 max-[359px]:flex-col max-[359px]:items-stretch">
             <div className="min-w-0">
-              <p className="text-[9px] uppercase tracking-[0.18em] text-on-contrast/55">
+              <p className="text-[12px] uppercase tracking-[0.12em] text-on-contrast/60">
                 {heroLabel}
               </p>
-              <p className="mt-1.5 whitespace-nowrap text-[clamp(1.5rem,4.8vw,1.9rem)] font-medium leading-none tracking-[-0.055em] tabular-nums">
-                {money(heroValue)}
+              <p
+                className={
+                  'mt-1.5 font-medium leading-none tracking-[-0.055em] tabular-nums [overflow-wrap:anywhere] ' +
+                  heroSize
+                }
+              >
+                {heroText}
                 <span className="ml-1.5 text-[11px] font-normal tracking-normal text-on-contrast/60">
                   USDC
                 </span>
@@ -632,14 +647,14 @@ export function ActionDialog({
               <>
                 {t.common.connectWallet}
                 <span className="btn-icon">
-                  <ArrowRight size={15} />
+                  <CaretRight size={12} weight="bold" />
                 </span>
               </>
             ) : (
               <>
                 {confirmLabel}
                 <span className="btn-icon">
-                  <ArrowRight size={15} />
+                  <CaretRight size={12} weight="bold" />
                 </span>
               </>
             )}

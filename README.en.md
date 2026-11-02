@@ -1,17 +1,51 @@
 # TÍCH — On-chain term deposits
 
-[![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-d1d5db?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-111827?style=flat-square)](README.en.md)
+<p><a href="README.md"><img src="https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-d8ebde?style=for-the-badge" alt="Tiếng Việt" /></a>&nbsp;<a href="README.en.md"><img src="https://img.shields.io/badge/EN-English-1e7a4a?style=for-the-badge" alt="English" /></a></p>
 
 TÍCH is an on-chain term-deposit system: depositors put in MockUSDC, receive an NFT certificate (ERC-721) and earn simple interest at the APR fixed when the deposit is opened. Depositors can top up principal (C4), settle at maturity, withdraw early in part (C3) or in full, claim deferred interest when the vault is short (C1), or renew into a new term.
 
-The React + TypeScript interface connects to injected wallets through EIP-6963 (MetaMask is the default; Rabby, Coinbase Wallet, Brave and other injected wallets also work), reading from and writing to the three contracts on Sepolia. After connecting, balances, plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state.
+The React + TypeScript interface connects to injected wallets through EIP-6963 (MetaMask is the default; Rabby, Coinbase Wallet, Brave and other injected wallets also work), reading from and writing to the three contracts on Sepolia. After connecting, balances, plans and deposits are all read from chain; while the RPC is pending, the interface shows a loading state. Every connected wallet gets a **Get test USDC** field on the plans and deposits pages and chooses its own amount: `MockUSDC.mint` is public and uncapped, so anyone can fund themselves — only Sepolia ETH for gas is required.
+
+> **Design note — MockUSDC deliberately has no ownership.** The contract does not inherit `Ownable`, has no `owner`, no roles and no supply cap: `mint` is open to any address, for any amount, as often as you like. That is intentional, so a stranger can faucet the demo without an admin handing out tokens. The trade-off is that issuance can never be revoked or capped, which makes this token **testnet only**. A real token needs access control, a supply cap and a controlled issuance path.
+
+## Screens
+
+<p align="center">
+  <img src="screenshots/app-13-connect-prompt.png" width="32%" alt="Plans page before connecting a wallet" />
+  <img src="screenshots/app-01-plans.png" width="32%" alt="Six saving plans read straight from chain" />
+  <img src="screenshots/app-03-deposits.png" width="32%" alt="My deposits with NFT certificates and filters" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-05-history.png" width="32%" alt="Settlement history with PnL" />
+  <img src="screenshots/app-06-admin.png" width="32%" alt="Admin dashboard: vault, interest reserve, roles" />
+  <img src="screenshots/app-14-wallet-dialog.png" width="32%" alt="EIP-6963 wallet picker" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-07-plans-dark.png" width="32%" alt="Plans page, dark theme" />
+  <img src="screenshots/app-08-deposits-dark.png" width="32%" alt="My deposits, dark theme" />
+  <img src="screenshots/app-15-history-dark.png" width="32%" alt="Settlement history, dark theme" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-16-admin-dark.png" width="32%" alt="Admin dashboard, dark theme" />
+  <img src="screenshots/app-18-admin-plans-dark.png" width="32%" alt="Admin plans management, dark theme" />
+  <img src="screenshots/app-09-plans-en.png" width="32%" alt="Plans page in English" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-11-mobile-plans.png" width="22%" alt="Plans page on mobile" />
+  <img src="screenshots/app-12-mobile-deposits.png" width="22%" alt="My deposits on mobile" />
+  <img src="screenshots/app-17-admin-plans.png" width="48%" alt="Admin plan management and share breakdown" />
+</p>
 
 ## Current status
 
 | Area | Status |
 | --- | --- |
-| Source and tests | C1–C4 fully implemented. 104/104 contract tests pass, 38/38 frontend tests pass, 20/20 keeper tests pass, 100% contract line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
-| Public Sepolia | Deployed on 2026-10-30 with 5 plans, a `100,000 USDC` vault and 12 setup transactions (`2,929,946,052` wei of gas). All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
+| Source and tests | C1–C4 fully implemented. 104/104 contract tests pass, 49/49 frontend tests pass, 21/21 keeper tests pass, 100% contract line and statement coverage; `contracts:typecheck`, `build` and `lint` all pass. |
+| Public Sepolia | Deployed on 2026-10-30 with 5 plans, `100,000 USDC` funded into the vault and 12 setup transactions (`2,929,946,052` wei of gas). All three contracts are verified on Etherscan; Sourcify reports `exact_match` for `VaultManager`/`SavingCore` and `match` for `MockUSDC`. |
 | Sepolia E2E | Not re-run on the current address set. The 2026-10-29 `immediate` run belongs to the retired deployment; `npm run test:sepolia` must be run again to produce evidence for this build. |
 | MetaMask walkthrough | Not re-run on the current address set; the 2026-10-29 record belongs to the retired deployment. |
 
@@ -205,7 +239,7 @@ Three layers of protection: `staticCall` simulates before sending, so a revert (
 
 | Contract | Holds | Main functions |
 | --- | --- | --- |
-| `MockUSDC` | no money | ERC-20 with 6 decimals, public `mint` for testing |
+| `MockUSDC` | no money | ERC-20 with 6 decimals; **no `Ownable`, no roles, no cap** — `mint` is open to any address so anyone can faucet |
 | `VaultManager` | the bank's interest money | vault deposits/withdrawals, fee receiver, pause, reserve/release/pay interest |
 | `SavingCore` | depositors' principal | plans, NFT certificates, snapshots, settlement, claim, top-up, early withdrawal, renewal |
 | `IVaultManager` | — | interface defining data types for calls from core to vault |
@@ -373,7 +407,7 @@ npm run verify:testnet
 npm run configure:frontend -- testnet
 ```
 
-`deploy:testnet:dry` only reads the RPC and prints the worst-case cost. `verify:testnet` compares the manifest with the real chain: chain ID, addresses derived from receipts, nonce continuity, block range, gas, bytecode presence, token–vault–core wiring, `vault.core()`, the admin of `CORE_ROLE` being locked, fee receiver, grace period, exactly 5 plans, the vault funding and `reservedInterest <= vault balance`. Once e2e has opened deposits, add `ALLOW_POST_E2E=1` to skip the fresh-deploy snapshot checks.
+`deploy:testnet:dry` only reads the RPC and prints the worst-case cost. `verify:testnet` compares the manifest with the real chain: chain ID, addresses derived from receipts, nonce continuity, block range, gas, bytecode presence, token–vault–core wiring, `vault.core()`, the admin of `CORE_ROLE` being locked, fee receiver, grace period, the tenor/limits/penalty of the five manifest plans, the vault funding and `reservedInterest <= vault balance`. Once e2e has opened deposits, add `ALLOW_POST_E2E=1` to skip the fresh-deploy snapshot checks. That flag also skips APR, enabled state and plan count, because `updatePlan`, `setPlanEnabled` and `createPlan` are allowed to change them after deployment. The script needs an RPC that still serves old receipts (publicnode has pruned them, tenderly has not).
 
 Source verification runs inside `contracts/`:
 

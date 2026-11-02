@@ -1,7 +1,8 @@
-import { ArrowClockwise, ArrowRight, Info, WarningCircle } from '@phosphor-icons/react'
+import { ArrowClockwise, CaretRight, Info, WarningCircle } from '@phosphor-icons/react'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PlanCard } from '../components/PlanCard'
+import { TestFundsNotice } from '../components/TestFundsNotice'
 import { useI18n } from '../i18n/lang'
 import { useBank } from '../state/bank'
 import { useUi } from '../state/ui'
@@ -25,12 +26,14 @@ export function PlansPage() {
             <button type="button" className="btn btn-primary" onClick={() => openDeposit()}>
               {t.common.openDeposit}
               <span className="btn-icon">
-                <ArrowRight size={15} weight="light" />
+                <CaretRight size={12} weight="bold" />
               </span>
             </button>
           )
         }
       />
+
+      <TestFundsNotice />
 
       {!state.wallet.connected ? (
         <EmptyState

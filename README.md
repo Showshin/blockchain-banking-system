@@ -1,17 +1,44 @@
 # TÍCH — Sổ tiết kiệm kỳ hạn on-chain
 
-[![Tiếng Việt](https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-111827?style=flat-square)](README.md) [![English](https://img.shields.io/badge/EN-English-d1d5db?style=flat-square)](README.en.md)
+<p><a href="README.md"><img src="https://img.shields.io/badge/VN-Ti%E1%BA%BFng_Vi%E1%BB%87t-1e7a4a?style=for-the-badge" alt="Tiếng Việt" /></a>&nbsp;<a href="README.en.md"><img src="https://img.shields.io/badge/EN-English-d8ebde?style=for-the-badge" alt="English" /></a></p>
 
 TÍCH là hệ thống sổ tiết kiệm có kỳ hạn on-chain: người gửi nạp MockUSDC, nhận chứng chỉ NFT (ERC-721) và hưởng lãi đơn theo APR cố định tại thời điểm mở sổ. Người gửi có thể nạp thêm gốc (C4), tất toán đúng hạn, rút trước hạn một phần (C3) hoặc toàn bộ, nhận lãi chờ khi vault thiếu tiền (C1) và tái gửi sang kỳ hạn mới.
 
-Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask mặc định; Rabby, Coinbase Wallet, Brave và các ví injected khác cũng dùng được), đọc/ghi trực tiếp lên ba contract trên Sepolia. Sau khi kết nối, số dư, gói và sổ đều được đọc từ chain; trong thời gian chờ RPC hiển thị trạng thái đang tải.
+Giao diện React + TypeScript kết nối ví injected qua EIP-6963 (MetaMask mặc định; Rabby, Coinbase Wallet, Brave và các ví injected khác cũng dùng được), đọc/ghi trực tiếp lên ba contract trên Sepolia. Sau khi kết nối, số dư, gói và sổ đều được đọc từ chain; trong thời gian chờ RPC hiển thị trạng thái đang tải. Mọi ví đã kết nối đều thấy ô **Nhận USDC test** trên trang Plans và Deposits và tự nhập số lượng muốn nhận: `MockUSDC.mint` mở công khai, không giới hạn, nên ai cũng tự nạp được — chỉ cần Sepolia ETH trả gas.
 
+> **Lưu ý thiết kế — MockUSDC cố ý không có ownership.** Contract không kế thừa `Ownable`, không có `owner`, không role và không giới hạn cung: `mint` mở cho bất kỳ địa chỉ nào, ai cũng gọi được bao nhiêu tùy thích. Đây là chủ ý để người lạ vào bản demo tự faucet mà không cần admin đứng ra cấp token. Đánh đổi là không có cách nào thu hồi hay chặn phát hành, nên token này **chỉ dùng cho testnet**. Một token thật phải có access control, giới hạn cung và đường phát hành riêng.
+
+## Screen
+
+<p align="center">
+  <img src="screenshots/app-13-connect-prompt.png" width="32%" alt="Trang gói tiết kiệm khi chưa kết nối ví" />
+  <img src="screenshots/app-01-plans.png" width="32%" alt="Sáu gói tiết kiệm đọc trực tiếp từ chain" />
+  <img src="screenshots/app-03-deposits.png" width="32%" alt="Sổ của tôi với chứng chỉ NFT và bộ lọc" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-05-history.png" width="32%" alt="Lịch sử tất toán kèm PnL" />
+  <img src="screenshots/app-06-admin.png" width="32%" alt="Bảng điều khiển admin: vault, kho lãi, role" />
+  <img src="screenshots/app-14-wallet-dialog.png" width="32%" alt="Hộp thoại chọn ví EIP-6963" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-07-plans-dark.png" width="32%" alt="Gói tiết kiệm, giao diện tối" />
+  <img src="screenshots/app-08-deposits-dark.png" width="32%" alt="Sổ của tôi, giao diện tối" />
+  <img src="screenshots/app-15-history-dark.png" width="32%" alt="Lịch sử tất toán, giao diện tối" />
+</p>
+
+<p align="center">
+  <img src="screenshots/app-16-admin-dark.png" width="32%" alt="Bảng điều khiển admin, giao diện tối" />
+  <img src="screenshots/app-18-admin-plans-dark.png" width="32%" alt="Quản lý gói và thị phần, giao diện tối" />
+  <img src="screenshots/app-09-plans-en.png" width="32%" alt="Plans page in English" />
+</p>
 ## Trạng thái hiện tại
 
 | Phạm vi | Trạng thái |
 | --- | --- |
-| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 104/104 kiểm thử contract đạt, 38/38 test frontend đạt, 20/20 test keeper đạt, độ bao phủ contract 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
-| Sepolia công khai | Triển khai ngày 2026-10-30 với 5 gói, vault `100.000 USDC` và 12 giao dịch thiết lập (gas `2,929,946,052` wei). Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
+| Mã nguồn và kiểm thử | Triển khai đủ C1–C4. 104/104 kiểm thử contract đạt, 49/49 test frontend đạt, 21/21 test keeper đạt, độ bao phủ contract 100% dòng và câu lệnh; `contracts:typecheck`, `build` và `lint` đều đạt. |
+| Sepolia công khai | Triển khai ngày 2026-10-30 với 5 gói, nạp `100.000 USDC` vào vault và 12 giao dịch thiết lập (gas `2,929,946,052` wei). Cả ba contract đã được xác thực trên Etherscan; Sourcify đạt `exact_match` cho `VaultManager`/`SavingCore` và `match` cho `MockUSDC`. |
 | Kiểm thử E2E trên Sepolia | Chưa chạy lại trên bộ địa chỉ hiện tại. Lần chạy `immediate` ngày 2026-10-29 thuộc bộ contract trước, đã ngừng dùng; cần chạy lại `npm run test:sepolia` để có bằng chứng cho bản này. |
 | Walkthrough MetaMask | Chưa chạy lại trên bộ địa chỉ hiện tại; bản ghi ngày 2026-10-29 thuộc bộ contract trước. |
 
@@ -205,7 +232,7 @@ Ba lớp an toàn: `staticCall` mô phỏng trước khi gửi nên revert (chư
 
 | Contract | Lưu giữ | Chức năng chính |
 | --- | --- | --- |
-| `MockUSDC` | không giữ tiền | ERC-20 6 decimals, `mint` công khai để kiểm thử |
+| `MockUSDC` | không giữ tiền | ERC-20 6 decimals; **không `Ownable`, không role, không cap** — `mint` mở cho mọi địa chỉ để ai cũng faucet được |
 | `VaultManager` | tiền lãi của ngân hàng | nạp/rút vault, fee receiver, pause, reserve/release/pay interest |
 | `SavingCore` | gốc của người gửi | gói, NFT chứng chỉ, snapshot, tất toán, claim, nạp thêm, rút sớm, tái gửi |
 | `IVaultManager` | — | interface định nghĩa kiểu dữ liệu cho các lời gọi từ core sang vault |
@@ -373,7 +400,7 @@ npm run verify:testnet
 npm run configure:frontend -- testnet
 ```
 
-`deploy:testnet:dry` chỉ đọc RPC và in chi phí trong trường hợp xấu nhất. `verify:testnet` đối chiếu manifest với chain thật: chain ID, địa chỉ sinh ra từ receipt, nonce liên tục, phạm vi block, gas, bytecode tồn tại, liên kết token–vault–core, `vault.core()`, admin của `CORE_ROLE` đã bị khóa, fee receiver, grace period, đúng 5 gói, khoản nạp vào vault và `reservedInterest <= vault balance`. Sau khi e2e đã mở sổ, thêm `ALLOW_POST_E2E=1` để bỏ qua các kiểm tra snapshot của lần deploy mới.
+`deploy:testnet:dry` chỉ đọc RPC và in chi phí trong trường hợp xấu nhất. `verify:testnet` đối chiếu manifest với chain thật: chain ID, địa chỉ sinh ra từ receipt, nonce liên tục, phạm vi block, gas, bytecode tồn tại, liên kết token–vault–core, `vault.core()`, admin của `CORE_ROLE` đã bị khóa, fee receiver, grace period, kỳ hạn/hạn mức/phạt của 5 gói trong manifest, khoản nạp vào vault và `reservedInterest <= vault balance`. Sau khi e2e đã mở sổ, thêm `ALLOW_POST_E2E=1` để bỏ qua các kiểm tra snapshot của lần deploy mới. Cờ này cũng bỏ qua APR, trạng thái bật/tắt và số lượng gói, vì `updatePlan`, `setPlanEnabled` và `createPlan` được phép thay đổi chúng sau khi deploy. Script cần RPC còn giữ receipt cũ (publicnode đã prune, tenderly thì còn).
 
 Xác thực mã nguồn được chạy trong `contracts/`:
 

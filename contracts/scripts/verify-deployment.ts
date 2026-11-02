@@ -200,18 +200,28 @@ async function main() {
     "Deployer lacks PLAN_MANAGER_ROLE on SavingCore.",
   );
 
-  check((await core.nextPlanId()) === NEXT_PLAN_ID, "Unexpected number of deployment plans.");
+  // Tenor, limits and penalty are fixed once a plan exists, so they always have
+  // to match the manifest. APR and `enabled` are mutable by design
+  // (`updatePlan`, `setPlanEnabled`), and `createPlan` can add plans, so those
+  // are only asserted on a fresh deployment.
   for (const [index, expected] of DEPLOYMENT_PLANS.entries()) {
     const actual = await core.plans(BigInt(index + 1));
     check(actual.tenorDays === BigInt(expected.tenorDays), `Plan ${index + 1}: tenor mismatch.`);
-    check(actual.aprBps === BigInt(expected.aprBps), `Plan ${index + 1}: APR mismatch.`);
     check(actual.minDeposit === expected.minDeposit, `Plan ${index + 1}: minimum mismatch.`);
     check(actual.maxDeposit === expected.maxDeposit, `Plan ${index + 1}: maximum mismatch.`);
     check(
       actual.earlyWithdrawPenaltyBps === BigInt(expected.penaltyBps),
       `Plan ${index + 1}: penalty mismatch.`,
     );
-    check(actual.enabled, `Plan ${index + 1}: plan is disabled.`);
+  }
+
+  if (!allowPostE2e) {
+    check((await core.nextPlanId()) === NEXT_PLAN_ID, "Unexpected number of deployment plans.");
+    for (const [index, expected] of DEPLOYMENT_PLANS.entries()) {
+      const actual = await core.plans(BigInt(index + 1));
+      check(actual.aprBps === BigInt(expected.aprBps), `Plan ${index + 1}: APR mismatch.`);
+      check(actual.enabled, `Plan ${index + 1}: plan is disabled.`);
+    }
   }
 
   const vaultBalance = await token.balanceOf(deployment.contracts.VaultManager);

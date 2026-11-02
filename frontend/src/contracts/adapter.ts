@@ -5,6 +5,7 @@ import {
   formatUnits,
   parseUnits,
   type ContractTransactionReceipt,
+  type EventLog,
 } from 'ethers'
 import { messages } from '../i18n/messages'
 import type { Deposit, DepositStatus, SavingPlan } from '../types'
@@ -78,6 +79,51 @@ function requireEthereum(): NonNullable<Window['ethereum']> {
   return providerFor()
 }
 
+/**
+ * RPC providers cap the block span of one `eth_getLogs` call (Infura 10,000,
+ * several public nodes 5,000, others prune old logs entirely). Reading the whole
+ * deployment range in one request fails as soon as the chain moves past that
+ * cap, which took the whole snapshot down. Every log read now walks the range in
+ * windows this size instead.
+ */
+const LOG_WINDOW = 5_000
+
+/**
+ * Collects one event over a block range, window by window. A window the node
+ * cannot serve (pruned history, range cap) is skipped rather than failing the
+ * call, because a partial history is still usable.
+ *
+ * Nothing here throws: a pruned window and a dead RPC look identical at this
+ * level, and the caller decides. The snapshot always has mandatory reads that
+ * fail loudly on a real outage, so log reads stay purely best-effort.
+ */
+async function collectLogs(
+  contract: Contract,
+  eventName: string,
+  fromBlock: number,
+  toBlock: number,
+): Promise<{ logs: EventLog[]; served: number; failed: number }> {
+  const filter = contract.filters[eventName]()
+  const logs: EventLog[] = []
+  let served = 0
+  let failed = 0
+
+  for (let start = fromBlock; start <= toBlock; start += LOG_WINDOW) {
+    const end = Math.min(start + LOG_WINDOW - 1, toBlock)
+    try {
+      const window = await contract.queryFilter(filter, start, end)
+      for (const log of window) {
+        if ('args' in log) logs.push(log as EventLog)
+      }
+      served += 1
+    } catch {
+      failed += 1
+    }
+  }
+
+  return { logs, served, failed }
+}
+
 async function readContracts() {
   const config = requireConfig()
   const provider = new BrowserProvider(requireEthereum())
@@ -136,19 +182,32 @@ function planDescription(tenorDays: number): SavingPlan['description'] {
   }
 }
 
+/**
+ * Plans carry no name on chain, so the label is derived. Anything above 50% APR
+ * is twelve times the highest product rate and can only be a test plan.
+ */
+const TEST_PLAN_APR_BPS = 5_000
+
 function toPlan(id: number, source: ChainPlan): SavingPlan {
   const tenorDays = Number(source.tenorDays)
+  const aprBps = Number(source.aprBps)
+  const isTestPlan = aprBps >= TEST_PLAN_APR_BPS
   return {
     id: `chain-${id}`,
-    name: planName(tenorDays),
+    name: isTestPlan
+      ? { vi: messages.vi.chain.testPlanName, en: messages.en.chain.testPlanName }
+      : planName(tenorDays),
     tenorDays,
-    aprBps: Number(source.aprBps),
+    aprBps,
     minDeposit: asNumber(source.minDeposit),
     maxDeposit: source.maxDeposit === 0n ? Number.MAX_SAFE_INTEGER / 1_000_000 : asNumber(source.maxDeposit),
+    uncapped: source.maxDeposit === 0n,
     penaltyBps: Number(source.earlyWithdrawPenaltyBps),
     enabled: source.enabled,
-    popular: tenorDays === 90,
-    description: planDescription(tenorDays),
+    popular: tenorDays === 90 && !isTestPlan,
+    description: isTestPlan
+      ? { vi: messages.vi.chain.testPlanDescription, en: messages.en.chain.testPlanDescription }
+      : planDescription(tenorDays),
   }
 }
 
@@ -274,7 +333,8 @@ export async function assertConfiguredNetwork(): Promise<void> {
 export async function loadChainSnapshot(address: string): Promise<ChainSnapshot> {
   await assertConfiguredNetwork()
   const config = requireConfig()
-  const { usdc, core, vault } = await readContracts()
+  const { provider, usdc, core, vault } = await readContracts()
+  const latestBlock = await provider.getBlockNumber()
   const nextPlanId = Number(await core.nextPlanId())
   const planEntries = await Promise.all(
     Array.from({ length: Math.max(0, nextPlanId - 1) }, async (_, index) => {
@@ -283,41 +343,33 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
     }),
   )
 
-  const opened = await core.queryFilter(
-    core.filters.DepositOpened(),
-    config.deploymentBlock,
-    'latest',
-  )
+  // Certificate ids are sequential and nothing is ever burned, so the deposit
+  // list comes from `nextDepositId` and `ownerOf` rather than from event logs.
+  // Log queries are capped by block span and pruned by some public nodes, which
+  // used to fail the whole snapshot once the deployment fell out of range.
+  const nextDepositId = Number(await core.nextDepositId())
+  const ids = Array.from({ length: Math.max(0, nextDepositId - 1) }, (_, index) => BigInt(index + 1))
+
   // The deposit struct does not record how a position was closed, so the
   // Withdrawn event is the only source for early-vs-maturity and the interest
-  // that was actually paid.
-  const settled = await core.queryFilter(
-    core.filters.Withdrawn(),
-    config.deploymentBlock,
-    'latest',
-  )
+  // that was actually paid. It enriches the history rows but never blocks the
+  // snapshot: without it the rows fall back to the maturity figures.
   const withdrawals = new Map<string, { interest: bigint; isEarly: boolean }>()
-  for (const log of settled) {
-    if (!('args' in log)) continue
-    const args = log.args as unknown as {
-      depositId: bigint
-      interest: bigint
-      isEarly: boolean
+  if (config.deploymentBlock > 0) {
+    const { logs } = await collectLogs(core, 'Withdrawn', config.deploymentBlock, latestBlock)
+    for (const log of logs) {
+      const args = log.args as unknown as {
+        depositId: bigint
+        interest: bigint
+        isEarly: boolean
+      }
+      withdrawals.set(args.depositId.toString(), {
+        interest: args.interest,
+        isEarly: args.isEarly,
+      })
     }
-    withdrawals.set(args.depositId.toString(), {
-      interest: args.interest,
-      isEarly: args.isEarly,
-    })
   }
-  const ids = [
-    ...new Set(
-      opened.map((event) =>
-        ('args' in event ? (event.args.depositId as bigint) : 0n).toString(),
-      ),
-    ),
-  ]
-    .filter((id) => id !== '0')
-    .map(BigInt)
+
   const deposits = (
     await Promise.all(
       ids.map(async (id) => {
@@ -331,11 +383,17 @@ export async function loadChainSnapshot(address: string): Promise<ChainSnapshot>
         }
         if (owner.toLowerCase() !== address.toLowerCase()) return null
 
-        const [source, interest, pending] = await Promise.all([
+        const [source, interest] = (await Promise.all([
           readDepositSource(core, id),
           core.interestAtMaturity(id) as Promise<bigint>,
-          core.pendingInterest(id) as Promise<bigint>,
-        ])
+        ])) as [ChainDeposit, bigint]
+        // `pendingInterest` is only ever written by the deferred-interest path,
+        // which always leaves the status at PrincipalWithdrawn, so the read is
+        // skipped for every other certificate.
+        const pending =
+          source.status === PRINCIPAL_WITHDRAWN
+            ? ((await core.pendingInterest(id)) as bigint)
+            : 0n
         // Settled certificates stay in the snapshot so the history page can
         // record them. The deposits page filters for open positions only.
         return toDeposit(id, source, owner, interest, pending, withdrawals.get(id.toString()))
@@ -514,8 +572,19 @@ export async function claimChainInterest(
   return { interest: asNumber(args.amount as bigint) }
 }
 
-/** Admin operations. Every call reverts on chain unless the signer holds the role. */
-export async function setVaultPaused(address: string, paused: boolean): Promise<string> {
+/**
+ * MockUSDC is deliberately mintable by anyone, so a visitor can fund a fresh
+ * wallet without asking the admin. This is a real transaction and still costs
+ * Sepolia ETH for gas.
+ */
+export async function mintTestUsdc(address: string, amount: number): Promise<string> {
+  const { usdc } = await writeContracts(address)
+  const units = parseUnits(amount.toFixed(6), 6)
+  const receipt = (await (await usdc.mint(address, units)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+/** Admin operations. Every call reverts on chain unless the signer holds the role. */export async function setVaultPaused(address: string, paused: boolean): Promise<string> {
   const { vault } = await writeContracts(address)
   const receipt = (await (await (paused ? vault.pause() : vault.unpause())).wait()) as ContractTransactionReceipt
   return receipt.hash
@@ -529,6 +598,12 @@ export async function fundChainVault(address: string, amount: number): Promise<s
     await (await usdc.approve(contractConfig?.vaultAddress, MaxUint256)).wait()
   }
   const receipt = (await (await vault.fundVault(units)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export async function setChainFeeReceiver(address: string, nextReceiver: string): Promise<string> {
+  const { vault } = await writeContracts(address)
+  const receipt = (await (await vault.setFeeReceiver(nextReceiver)).wait()) as ContractTransactionReceipt
   return receipt.hash
 }
 
@@ -546,6 +621,43 @@ export async function setChainPlanEnabled(
 ): Promise<string> {
   const { core } = await writeContracts(address)
   const receipt = (await (await core.setPlanEnabled(chainPlanId(planId), enabled)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+export interface NewPlanInput {
+  tenorDays: number
+  aprBps: number
+  minDeposit: number
+  maxDeposit: number
+  penaltyBps: number
+}
+
+/**
+ * Updates a plan's APR. `updatePlan` is the only mutable field: tenor, limits and
+ * penalty are fixed once the plan exists, because deposits snapshot them.
+ */
+export async function updateChainPlan(
+  address: string,
+  planId: string,
+  aprBps: number,
+): Promise<string> {
+  const { core } = await writeContracts(address)
+  const receipt = (await (await core.updatePlan(chainPlanId(planId), aprBps)).wait()) as ContractTransactionReceipt
+  return receipt.hash
+}
+
+/** Creates a plan on chain. The contract still checks PLAN_MANAGER_ROLE. */
+export async function createChainPlan(address: string, input: NewPlanInput): Promise<string> {
+  const { core } = await writeContracts(address)
+  const receipt = (await (
+    await core.createPlan(
+      input.tenorDays,
+      input.aprBps,
+      parseUnits(input.minDeposit.toFixed(6), 6),
+      parseUnits(input.maxDeposit.toFixed(6), 6),
+      input.penaltyBps,
+    )
+  ).wait()) as ContractTransactionReceipt
   return receipt.hash
 }
 
@@ -577,18 +689,29 @@ export async function loadDepositTimeline(depositId: string): Promise<TimelineEn
   const { core, provider } = await readContracts()
   const id = BigInt(depositId.replace('chain-', ''))
   const from = config.deploymentBlock
+  const latestBlock = await provider.getBlockNumber()
 
   // Indexed topic filters behave differently across wallet RPCs, so read every
   // event in the deployment range and keep the ones that belong to this id.
-  const [opened, topped, partial, withdrawn, renewed, deferred, claimed] = await Promise.all([
-    core.queryFilter(core.filters.DepositOpened(), from, 'latest'),
-    core.queryFilter(core.filters.DepositToppedUp(), from, 'latest'),
-    core.queryFilter(core.filters.PartialEarlyWithdrawn(), from, 'latest'),
-    core.queryFilter(core.filters.Withdrawn(), from, 'latest'),
-    core.queryFilter(core.filters.Renewed(), from, 'latest'),
-    core.queryFilter(core.filters.InterestDeferred(), from, 'latest'),
-    core.queryFilter(core.filters.InterestClaimed(), from, 'latest'),
+  // Each read walks the range in windows for the same reason the snapshot does.
+  const reads = await Promise.all([
+    collectLogs(core, 'DepositOpened', from, latestBlock),
+    collectLogs(core, 'DepositToppedUp', from, latestBlock),
+    collectLogs(core, 'PartialEarlyWithdrawn', from, latestBlock),
+    collectLogs(core, 'Withdrawn', from, latestBlock),
+    collectLogs(core, 'Renewed', from, latestBlock),
+    collectLogs(core, 'InterestDeferred', from, latestBlock),
+    collectLogs(core, 'InterestClaimed', from, latestBlock),
   ])
+  // Unlike the snapshot, the timeline has no mandatory read behind it, so an
+  // empty result would silently claim "this certificate has no history". When
+  // not a single window was served the RPC is unusable, and saying so is better.
+  if (reads.every((read) => read.served === 0 && read.failed > 0)) {
+    throw new Error('The RPC could not serve any log window for this certificate.')
+  }
+  const [opened, topped, partial, withdrawn, renewed, deferred, claimed] = reads.map(
+    (read) => read.logs,
+  )
   const mine = (log: unknown, field = 'depositId') => {
     const args = argsOf(log, field)
     return args && args[field] === id ? args : null

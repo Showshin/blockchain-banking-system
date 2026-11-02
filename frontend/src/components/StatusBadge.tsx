@@ -13,11 +13,11 @@ export function StatusBadge({ status }: { status: StatusTone }) {
   return (
     <span
       className={
-        'status-badge inline-flex min-w-[84px] items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.11em] ' +
+        'status-badge inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium leading-none tracking-[0.005em] ' +
         styles[status]
       }
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-75" aria-hidden="true" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
       {t.status[status]}
     </span>
   )

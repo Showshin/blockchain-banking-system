@@ -40,9 +40,13 @@ export interface BankContextValue {
   renewDeposit: (depositId: string, newPlanId: string) => Promise<Deposit>
   topUpDeposit: (depositId: string, amount: number) => Promise<TopUpReceipt>
   claimInterest: (depositId: string) => Promise<ClaimReceipt>
+  /** Mints MockUSDC to the connected wallet so a visitor can try the flows. */
+  requestTestFunds: (amount: number) => Promise<string>
   connectWallet: (address: string, identity?: WalletIdentity) => void
   disconnectWallet: () => void
   refreshChain: () => Promise<void>
+  /** Refreshes now and again after the next block, for post-transaction reads. */
+  refreshAfterTx: () => Promise<void>
 }
 
 export const BankContext = createContext<BankContextValue | null>(null)

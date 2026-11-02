@@ -78,13 +78,6 @@ export function totalSettledPrincipal(deposits: Deposit[]): number {
     .reduce((total, deposit) => total + deposit.principal, 0)
 }
 
-/** Interest the closed certificates accrued at their maturity date. */
-export function totalSettledInterest(deposits: Deposit[]): number {
-  return deposits
-    .filter((deposit) => isSettled(deposit))
-    .reduce((total, deposit) => total + deposit.interestAtMaturity, 0)
-}
-
 export type SettlementKind = 'early' | 'matured' | 'renewed' | 'claimed'
 
 /** How a closed position ended; drives the PnL caption. */

@@ -44,13 +44,12 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export type PhaseName = "immediate" | "mature" | "auto-renew";
 
 export type PhaseState = {
-  status: "pending" | "in_progress" | "completed" | "skipped";
+  status: "pending" | "in_progress" | "completed";
   startedAt?: string;
   completedAt?: string;
   spentWei?: string;
   checks?: string[];
   txs?: Array<{ name: string; hash: string; gasUsed: string; costWei: string }>;
-  note?: string;
 };
 
 export type StoredDeposit = {
@@ -196,7 +195,7 @@ export function saveState(state: E2EState): void {
 
 export async function startPhase(state: E2EState, phase: PhaseName): Promise<boolean> {
   const entry = state.phases[phase];
-  if (entry.status === "completed" || entry.status === "skipped") {
+  if (entry.status === "completed") {
     console.log(`Phase ${phase} is ${entry.status}; nothing to do.`);
     return false;
   }
@@ -213,13 +212,6 @@ export function completePhase(state: E2EState, phase: PhaseName): void {
   state.phases[phase].completedAt = new Date().toISOString();
   saveState(state);
   console.log(`Phase ${phase} completed.`);
-}
-
-export function skipPhase(state: E2EState, phase: PhaseName, reason: string): void {
-  state.phases[phase].status = "skipped";
-  state.phases[phase].note = reason;
-  saveState(state);
-  console.log(`Phase ${phase} skipped: ${reason}`);
 }
 
 export async function phaseStep<T>(

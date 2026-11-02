@@ -4,7 +4,7 @@ Ba contract chính, cộng một interface định kiểu:
 
 | File | Vai trò |
 | --- | --- |
-| `contracts/MockUSDC.sol` | ERC-20 test token, 6 decimals, public mint |
+| `contracts/MockUSDC.sol` | ERC-20 test token, 6 decimals, public mint. Cố ý **không `Ownable`, không role, không cap**: `mint` mở cho mọi địa chỉ để bất kỳ ai cũng tự faucet được. Chỉ dùng cho testnet; token thật cần access control và giới hạn cung. |
 | `contracts/VaultManager.sol` | Kho lãi, `reservedInterest`, fee receiver, pause, trả lãi |
 | `contracts/SavingCore.sol` | Gói, chứng chỉ ERC-721, tất toán, claim, top-up, rút sớm, tái gửi |
 | `contracts/interfaces/IVaultManager.sol` | Ranh giới `SavingCore` → `VaultManager` |
@@ -63,7 +63,7 @@ Script deploy:
 
 `deploy:testnet:dry` chỉ đọc RPC, ước lượng gas và ghi báo cáo tạm; không gửi giao dịch. `configure:frontend` chuyển manifest thành `frontend/.env.local`; cả `.env.local` lẫn report dry-run đều không được commit.
 
-`verify:testnet` đối chiếu chain thật với manifest: chain ID, địa chỉ sinh ra từ receipt, nonce liên tục, block range, gas, bytecode tồn tại, liên kết token–vault–core, `vault.core()`, `grantRole`/`setCoreOnce` role lock, fee receiver, grace period, đúng 5 gói, funding và `reservedInterest <= vault balance`. Sau khi e2e đã mở sổ, dùng `ALLOW_POST_E2E=1 npm run verify:testnet` để bỏ qua các check snapshot mới deploy.
+`verify:testnet` đối chiếu chain thật với manifest: chain ID, địa chỉ sinh ra từ receipt, nonce liên tục, block range, gas, bytecode tồn tại, liên kết token–vault–core, `vault.core()`, `grantRole`/`setCoreOnce` role lock, fee receiver, grace period, kỳ hạn/hạn mức/phạt của 5 gói trong manifest, funding và `reservedInterest <= vault balance`. Sau khi e2e đã mở sổ, dùng `ALLOW_POST_E2E=1 npm run verify:testnet` để bỏ qua các check snapshot mới deploy; cờ này cũng bỏ qua APR, trạng thái bật/tắt và số lượng gói vì admin được phép sửa sau khi deploy. Script cần RPC còn giữ receipt cũ — publicnode đã prune, tenderly thì chưa.
 
 Source verification dùng `hardhat-verify`:
 
@@ -81,7 +81,7 @@ Deployment công khai hiện tại trên Sepolia:
 | `VaultManager` | `0x1c5533537118320021b5795473cb2552d11Bf9B5` |
 | `SavingCore` | `0x10E9eDb55C0cD100F67DEc8b558649e66B263c79` |
 
-Deployer kiêm fee receiver: `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`. Bản này deploy ngày 2026-10-30, block `12026923`–`12026936`, 12 giao dịch setup, gas thực tế `2,929,946,052` wei. Vault giữ `100.000 USDC`; `verify:testnet` xác nhận đủ 5 gói và invariant reserve. Cả ba contract verified trên Etherscan; Sourcify: `MockUSDC` runtime `match`, `VaultManager` và `SavingCore` `exact_match`.
+Deployer kiêm fee receiver: `0xE19750FC95F44bE27E4ec44F2779d2C38ba6F731`. Bản này deploy ngày 2026-10-30, block `12026923`–`12026936`, 12 giao dịch setup, gas thực tế `2,929,946,052` wei. Khi deploy, vault được nạp `100.000 USDC`; admin đã rút một phần nên số dư hiện tại thấp hơn, và `verify:testnet` chỉ kiểm tra `reservedInterest <= vault balance`. Cả ba contract verified trên Etherscan; Sourcify: `MockUSDC` runtime `match`, `VaultManager` và `SavingCore` `exact_match`.
 
 ## E2E Sepolia
 

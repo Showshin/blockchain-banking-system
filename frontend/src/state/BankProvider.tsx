@@ -58,6 +58,7 @@ function translateChainError(cause: unknown, t: Messages): Error {
     ['Core: remaining below minimum', t.errors.remainingBelowMinimum],
     ['Core: insufficient balance', t.errors.insufficientBalance],
     ['ERC20InsufficientBalance', t.errors.insufficientBalance],
+    ['insufficient funds', t.errors.gasRequired],
     ['Vault: insufficient interest', t.errors.vaultShortfall],
     ['Core: not matured', t.errors.notMatured],
     ['Core: already matured', t.errors.alreadyMatured],
@@ -72,6 +73,13 @@ function translateChainError(cause: unknown, t: Messages): Error {
     ['Vault: reserved interest', t.errors.vaultProtected],
     ['Vault: undercollateralized', t.errors.vaultProtected],
     ['Vault: release exceeds reserved', t.errors.vaultProtected],
+    ['could not coalesce error', t.errors.rpcUnavailable],
+    ['pruned history', t.errors.rpcUnavailable],
+    ['block range', t.errors.rpcUnavailable],
+    ['ranges over', t.errors.rpcUnavailable],
+    ['missing response', t.errors.rpcUnavailable],
+    ['failed to fetch', t.errors.rpcUnavailable],
+    ['network error', t.errors.rpcUnavailable],
   ]
   const match = mapping.find(([fragment]) => message.includes(fragment))
   if (match) return new Error(match[1])
@@ -147,6 +155,17 @@ export function BankProvider({ children }: { children: ReactNode }) {
     }
   }, [address, isChainMode, t])
 
+  /**
+   * A transaction is confirmed in a block, but the read that follows can land on
+   * a load-balanced RPC node that has not indexed that block yet, leaving the
+   * page on pre-transaction state until the next reload. One delayed re-read
+   * closes that gap.
+   */
+  const refreshAfterTx = useCallback(async () => {
+    await refreshChain()
+    window.setTimeout(() => void refreshChain(), 1_500)
+  }, [refreshChain])
+
   useEffect(() => {
     const task = window.setTimeout(() => void refreshChain(), 0)
     return () => window.clearTimeout(task)
@@ -170,7 +189,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { openChainDeposit } = await import('../contracts/adapter')
           const deposit = await openChainDeposit(address, plan.id, amount)
-          await refreshChain()
+          await refreshAfterTx()
           return deposit
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -178,7 +197,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.plans, state.wallet.balance, state.wallet.connected, t],
+    [address, refreshAfterTx, state.plans, state.wallet.balance, state.wallet.connected, t],
   )
 
   const withdrawDeposit = useCallback(
@@ -191,7 +210,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { withdrawChainDeposit } = await import('../contracts/adapter')
           const result = await withdrawChainDeposit(address, deposit.id)
-          await refreshChain()
+          await refreshAfterTx()
           return result.receipt
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -199,7 +218,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.deposits, state.wallet.connected, t],
+    [address, refreshAfterTx, state.deposits, state.wallet.connected, t],
   )
 
   const withdrawDepositPartial = useCallback(
@@ -215,7 +234,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { withdrawChainDepositPartial } = await import('../contracts/adapter')
           const result = await withdrawChainDepositPartial(address, deposit.id, amount)
-          await refreshChain()
+          await refreshAfterTx()
           return result.receipt
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -223,7 +242,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.deposits, state.wallet.connected, t],
+    [address, refreshAfterTx, state.deposits, state.wallet.connected, t],
   )
 
   const renewDeposit = useCallback(
@@ -239,7 +258,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { renewChainDeposit } = await import('../contracts/adapter')
           const newDeposit = await renewChainDeposit(address, oldDeposit.id, plan.id)
-          await refreshChain()
+          await refreshAfterTx()
           return newDeposit
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -247,7 +266,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.deposits, state.plans, state.wallet.connected, t],
+    [address, refreshAfterTx, state.deposits, state.plans, state.wallet.connected, t],
   )
 
   const topUpDeposit = useCallback(
@@ -268,7 +287,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { topUpChainDeposit } = await import('../contracts/adapter')
           const result = await topUpChainDeposit(address, deposit.id, amount)
-          await refreshChain()
+          await refreshAfterTx()
           return result.receipt
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -276,7 +295,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.deposits, state.plans, state.wallet.balance, state.wallet.connected, t],
+    [address, refreshAfterTx, state.deposits, state.plans, state.wallet.balance, state.wallet.connected, t],
   )
 
   const claimInterest = useCallback(
@@ -295,7 +314,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         try {
           const { claimChainInterest } = await import('../contracts/adapter')
           const result = await claimChainInterest(address, deposit.id)
-          await refreshChain()
+          await refreshAfterTx()
           return result
         } catch (cause) {
           throw translateChainError(cause, t)
@@ -303,7 +322,26 @@ export function BankProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(t.errors.walletRequired)
     },
-    [address, refreshChain, state.deposits, state.wallet.connected, t],
+    [address, refreshAfterTx, state.deposits, state.wallet.connected, t],
+  )
+
+  const requestTestFunds = useCallback(
+    async (amount: number): Promise<string> => {
+      if (!state.wallet.connected) throw new Error(t.errors.walletRequired)
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error(t.errors.invalidAmount)
+      if (address) {
+        try {
+          const { mintTestUsdc } = await import('../contracts/adapter')
+          const hash = await mintTestUsdc(address, amount)
+          await refreshAfterTx()
+          return hash
+        } catch (cause) {
+          throw translateChainError(cause, t)
+        }
+      }
+      throw new Error(t.errors.walletRequired)
+    },
+    [address, refreshAfterTx, state.wallet.connected, t],
   )
 
   const connectWallet = useCallback((nextAddress: string, identity?: WalletIdentity) => {
@@ -388,6 +426,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       isChainMode,
+      refreshAfterTx,
       chainLoading,
       chainLoaded,
       chainError,
@@ -398,6 +437,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       renewDeposit,
       topUpDeposit,
       claimInterest,
+      requestTestFunds,
       connectWallet,
       disconnectWallet,
       refreshChain,
@@ -405,6 +445,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
     [
       state,
       isChainMode,
+      refreshAfterTx,
       chainLoading,
       chainLoaded,
       chainError,
@@ -415,6 +456,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
       renewDeposit,
       topUpDeposit,
       claimInterest,
+      requestTestFunds,
       connectWallet,
       disconnectWallet,
       refreshChain,

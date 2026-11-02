@@ -1,7 +1,7 @@
 import {
   ArrowClockwise,
-  ArrowRight,
   ArrowSquareOut,
+  CaretRight,
   ClockCounterClockwise,
   Receipt,
   Wallet,
@@ -307,7 +307,7 @@ export function HistoryPage() {
             <Link to="/so-tiet-kiem" className="btn btn-primary">
               {t.history.empty.action}
               <span className="btn-icon">
-                <ArrowRight size={15} weight="light" />
+                <CaretRight size={12} weight="bold" />
               </span>
             </Link>
           }

@@ -1,4 +1,4 @@
-import { ArrowClockwise, ArrowRight, ArrowSquareOut, Plus, SealCheck } from '@phosphor-icons/react'
+import { ArrowClockwise, CaretRight, ArrowSquareOut, Plus, SealCheck } from '@phosphor-icons/react'
 import { contractConfig } from '../contracts/config'
 import { useI18n } from '../i18n/lang'
 import { depositProgress, interestEarned, isClaimable, isMatured } from '../lib/bank'
@@ -76,7 +76,8 @@ export function CertificateCard({
               <span className="font-medium text-accent">+{formatUsdc(interest, false, true)} USDC</span>
             </p>
           </div>
-          <CertificateSeal tier={tier} />
+          {/* Mirrors the contract: anything that is no longer Active gets the closed seal. */}
+          <CertificateSeal tier={tier} closed={deposit.status !== 'active'} />
         </div>
 
         <div className="mt-7 grid grid-cols-3 gap-3 border-t border-line/80 pt-4">
@@ -119,7 +120,7 @@ export function CertificateCard({
             >
               {copy.claim}
               <span className="btn-icon">
-                <ArrowRight size={13} weight="light" />
+                <CaretRight size={12} weight="bold" />
               </span>
             </button>
           ) : matured ? (
@@ -131,7 +132,7 @@ export function CertificateCard({
               >
                 {copy.settle}
                 <span className="btn-icon">
-                  <ArrowRight size={13} weight="light" />
+                  <CaretRight size={12} weight="bold" />
                 </span>
               </button>
               <button
@@ -198,13 +199,18 @@ function Meta({ label, value }: { label: string; value: string }) {
   )
 }
 
-function CertificateSeal({ tier }: { tier: SealTier }) {
+function CertificateSeal({ tier, closed = false }: { tier: SealTier; closed?: boolean }) {
   return (
-    <span className={`certificate-seal certificate-seal-${tier}`} aria-hidden="true">
+    <span
+      className={`certificate-seal ${closed ? 'certificate-seal-closed' : `certificate-seal-${tier}`}`}
+      aria-hidden="true"
+    >
       <span className="certificate-seal-ring" />
       <span className="certificate-seal-core">
         <span>TÍCH</span>
-        <small>ON-CHAIN</small>
+        <small className={closed ? 'certificate-seal-closed-label' : undefined}>
+          {closed ? 'CLOSED' : 'ON-CHAIN'}
+        </small>
       </span>
     </span>
   )

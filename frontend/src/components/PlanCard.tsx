@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, Coins, ShieldCheck } from '@phosphor-icons/react'
+import { CaretRight, Clock, Coins, ShieldCheck } from '@phosphor-icons/react'
 import { useI18n } from '../i18n/lang'
 import { formatBps, formatUsdc } from '../lib/format'
 import { sealTierFor } from '../lib/seal'
@@ -82,14 +82,16 @@ export function PlanCard({
         </span>
         <span className={'flex items-center gap-1.5 ' + (featured ? 'text-on-contrast/65' : 'text-muted')}>
           <Coins size={14} weight="light" />
-          {t.plans.from(formatUsdc(plan.minDeposit, true))}
+          {plan.minDeposit > 0
+            ? t.plans.from(formatUsdc(plan.minDeposit, true))
+            : t.plans.noMinimum}
         </span>
         <span className={'flex items-center gap-1.5 ' + (featured ? 'text-on-contrast/65' : 'text-muted')}>
           <ShieldCheck size={14} weight="light" />
           {t.plans.penalty(formatBps(plan.penaltyBps))}
         </span>
         <span className={'flex items-center gap-1.5 ' + (featured ? 'text-on-contrast/65' : 'text-muted')}>
-          {t.plans.max(formatUsdc(plan.maxDeposit, true))}
+          {plan.uncapped ? t.plans.unlimited : t.plans.max(formatUsdc(plan.maxDeposit, true))}
         </span>
       </div>
 
@@ -101,7 +103,7 @@ export function PlanCard({
       >
         {plan.enabled ? t.plans.open : t.plans.unavailable}
         <span className="btn-icon">
-          <ArrowRight size={15} weight="light" />
+          <CaretRight size={12} weight="bold" />
         </span>
       </button>
     </article>

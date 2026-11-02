@@ -1,4 +1,4 @@
-import { ArrowRight, Check, SealCheck, Wallet, X } from '@phosphor-icons/react'
+import { CaretRight, Check, SealCheck, Wallet, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -205,7 +205,7 @@ export function DepositDialog({
                     >
                       {t.common.viewDeposits}
                       <span className="btn-icon">
-                        <ArrowRight size={15} weight="light" />
+                        <CaretRight size={12} weight="bold" />
                       </span>
                     </button>
                     <button type="button" className="btn btn-secondary flex-1" onClick={onClose}>
@@ -255,7 +255,9 @@ export function DepositDialog({
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-3" id="deposit-amount-help">
                     <span className="text-[11px] text-muted">
-                      {copy.range(money(plan.minDeposit), money(plan.maxDeposit))}
+                      {plan.uncapped
+                        ? copy.rangeUncapped(money(plan.minDeposit))
+                        : copy.range(money(plan.minDeposit), money(plan.maxDeposit))}
                     </span>
                     <button
                       type="button"
@@ -340,14 +342,14 @@ export function DepositDialog({
                       <>
                         {copy.submitConnect}
                         <span className="btn-icon">
-                          <ArrowRight size={15} />
+                          <CaretRight size={12} weight="bold" />
                         </span>
                       </>
                     ) : (
                       <>
                         {copy.submit}
                         <span className="btn-icon">
-                          <ArrowRight size={15} />
+                          <CaretRight size={12} weight="bold" />
                         </span>
                       </>
                     )}

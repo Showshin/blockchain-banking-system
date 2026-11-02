@@ -19,6 +19,8 @@ export interface SavingPlan {
   aprBps: number
   minDeposit: number
   maxDeposit: number
+  /** True when the plan has no cap on chain (`maxDeposit == 0`). */
+  uncapped?: boolean
   penaltyBps: number
   enabled: boolean
   popular?: boolean

@@ -41,7 +41,6 @@ export const vi = {
     minutesLeft: (minutes: number) => 'Còn ' + minutes + ' phút',
     lessThanMinute: 'Còn dưới 1 phút',
     matured: 'Đã đáo hạn',
-    today: 'Hôm nay',
     apr: 'APR',
     processing: 'Đang xử lý…',
     noPlan: 'Không còn',
@@ -70,6 +69,9 @@ export const vi = {
     },
     planDescription: (tenorDays: number) =>
       `Gói on-chain ${tenorDays} ngày với APR và mức phạt được khóa khi mở sổ.`,
+    testPlanName: 'Gói thử nghiệm',
+    testPlanDescription:
+      'Gói do quản trị viên tạo để kiểm thử luồng, không phải sản phẩm tiết kiệm.'
   },
   network: {
     title: 'Ví đang ở sai mạng',
@@ -88,6 +90,8 @@ export const vi = {
     from: (amount: string) => 'từ ' + amount,
     penalty: (rate: string) => 'phạt ' + rate,
     max: (amount: string) => 'Tối đa ' + amount,
+    unlimited: 'Không giới hạn',
+    noMinimum: 'Không tối thiểu',
     open: 'Mở sổ với gói này',
     unavailable: 'Gói đang tạm đóng',
     note:
@@ -108,6 +112,25 @@ export const vi = {
     empty: {
       title: 'Chưa có sổ tiết kiệm',
       description: 'Mở sổ đầu tiên để bắt đầu theo dõi lãi và ngày đáo hạn.',
+    },
+    filter: {
+      label: 'Lọc theo trạng thái',
+      all: 'Tất cả',
+      running: 'Đang chạy',
+      matured: 'Đã đáo hạn',
+      claimable: 'Chờ nhận lãi',
+      plan: 'Gói',
+      planAll: 'Mọi gói',
+      empty: 'Không có sổ nào khớp bộ lọc.',
+      clear: 'Xoá bộ lọc',
+    },
+    sort: {
+      label: 'Sắp xếp',
+      recent: 'Mới nhất',
+      oldest: 'Cũ nhất',
+      maturity: 'Đáo hạn gần',
+      amountDesc: 'Gốc lớn nhất',
+      amountAsc: 'Gốc nhỏ nhất',
     },
     nftNote:
       'Chứng chỉ là NFT và chuyển nhượng được khi sổ còn đang chạy. Chủ sở hữu hiện tại của NFT có quyền rút, nạp thêm, nhận lãi hoặc tái gửi; sổ đã đóng thì chứng chỉ đứng yên.',
@@ -226,6 +249,12 @@ export const vi = {
       pausedOff: 'Đang chạy',
       core: 'Core',
       feeReceiver: 'Fee receiver',
+      solvency: 'Thanh khoản quỹ',
+      vaultSplit: 'Phân bổ quỹ lãi',
+      promised: 'Đã hứa',
+      withdrawable: 'Còn rút được',
+      solventOk: 'Đủ',
+      solventShort: 'Thiếu',
       roles: 'Role của ví',
     },
     roles: {
@@ -245,6 +274,9 @@ export const vi = {
       fundLabel: 'Nạp vào vault',
       withdrawLabel: 'Rút khỏi vault',
       walletHint: (value: string) => 'Ví có ' + value + ' USDC',
+      feeLabel: 'Fee receiver',
+      feeHint: 'Địa chỉ nhận tiền phạt rút trước hạn. Đổi được bất cứ lúc nào.',
+      feeInvalid: 'Địa chỉ không hợp lệ.',
       maxHint: (value: string) => 'Tối đa ' + value,
     },
     plans: {
@@ -253,6 +285,26 @@ export const vi = {
       off: 'Đã tắt',
       enable: 'Bật',
       disable: 'Tắt',
+      create: 'Thêm gói',
+      edit: 'Sửa',
+      save: 'Lưu',
+      editNote:
+        'Hợp đồng chỉ cho sửa APR. Kỳ hạn, hạn mức và mức phạt cố định sau khi tạo, vì sổ đã mở đã chốt các số đó.',
+      createHint:
+        'Kỳ hạn tính bằng ngày; APR và phạt nhập theo phần trăm. Gói mới bật ngay sau khi tạo.',
+      tenor: 'Kỳ hạn (ngày)',
+      apr: 'APR (%)',
+      penalty: 'Phạt rút sớm (%)',
+      min: 'Tối thiểu (USDC)',
+      max: 'Tối đa (USDC)',
+      minHint: '0 = không tối thiểu',
+      maxHint: '0 = không giới hạn',
+      submit: 'Tạo gói',
+      shareTitle: 'Thị phần gốc theo gói',
+      depositCount: (count: number) => count + ' sổ',
+      cancel: 'Huỷ',
+      invalid:
+        'Kiểm tra lại: kỳ hạn từ 1 ngày, APR 0–100%, phạt 0–100%, tối thiểu không vượt tối đa (0 nghĩa là không giới hạn).',
     },
     needRole: {
       admin: 'Cần DEFAULT_ADMIN_ROLE.',
@@ -273,6 +325,7 @@ export const vi = {
     available: 'Ví khả dụng',
     useMax: 'Dùng tối đa',
     range: (min: string, max: string) => 'Tối thiểu ' + min + ' · tối đa ' + max + ' USDC',
+    rangeUncapped: (min: string) => 'Tối thiểu ' + min + ' · không giới hạn',
     expectedInterest: 'Lãi dự kiến',
     receiveAtMaturity: 'Nhận khi đáo hạn',
     maturityDate: 'Ngày đáo hạn',
@@ -387,7 +440,6 @@ export const vi = {
     noteContractSetup:
       'Kết nối ví injected để đọc và ký giao dịch trực tiếp với smart contract đã cấu hình.',
     chainLoading: 'Đang đọc dữ liệu từ contract…',
-    chainReady: 'Đã kết nối đúng chain và đọc được dữ liệu contract.',
     switchNetwork: 'Chuyển sang Sepolia',
     disconnect: 'Ngắt kết nối',
     walletWaiting: 'Đang chờ phê duyệt…',
@@ -402,6 +454,24 @@ export const vi = {
     errorWrongNetwork: (chainId: string) => 'Hãy chuyển ví sang chain ID ' + chainId + ' rồi thử lại.',
     toastWalletTitle: (name: string) => 'Đã kết nối ' + name,
     toastWalletMessage: 'Mỗi giao dịch sẽ cần bạn xác nhận trong ví.',
+  },
+  faucet: {
+    titleEmpty: 'Ví này chưa có USDC',
+    descriptionEmpty:
+      'Bản demo dùng MockUSDC trên Sepolia. Nhận USDC test để mở sổ, nạp thêm và thử tất toán.',
+    titleFunded: 'Nhận thêm USDC test',
+    descriptionFunded: 'MockUSDC cho phép mint tự do, không giới hạn. Nhập số lượng bạn muốn.',
+    amountLabel: 'Số USDC muốn nhận',
+    action: 'Nhận',
+    pending: 'Đang chờ…',
+    balance: (value: string) => 'Đang có ' + value + ' USDC',
+    successTitle: 'Đã nhận USDC test',
+    successMessage: (value: string) => 'Ví đã có thêm ' + value + ' USDC test.',
+    errorTitle: 'Không nhận được USDC test',
+    invalidAmount: 'Nhập số lớn hơn 0.',
+    tooLarge: (value: string) => 'Tối đa ' + value + ' USDC mỗi lần.',
+    gasNote: 'Vẫn cần Sepolia ETH để trả gas. Lấy miễn phí tại',
+    gasLink: 'faucet Sepolia',
   },
   notFound: {
     title: 'Trang này chưa có trong sổ.',
@@ -434,6 +504,8 @@ export const vi = {
     interestNotReserved: 'Kho lãi chưa ghi nhận khoản lãi này.',
     vaultReserveExceedsBalance: 'Kho lãi chưa đủ tiền để giữ khoản lãi này. Hãy nạp thêm kho lãi.',
     vaultProtected: 'Kho lãi đang giữ phần lãi đã hứa nên không thể rút phần đó.',
+    rpcUnavailable: 'RPC của ví không phản hồi hoặc từ chối yêu cầu. Kiểm tra kết nối mạng rồi thử lại.',
+    gasRequired: 'Ví không đủ Sepolia ETH để trả phí gas. Nạp ETH test rồi thử lại.',
   },
 }
 
@@ -480,7 +552,6 @@ export const en: Messages = {
     minutesLeft: (minutes: number) => minutes + ' min left',
     lessThanMinute: 'Less than a minute left',
     matured: 'Matured',
-    today: 'Today',
     apr: 'APR',
     processing: 'Processing…',
     noPlan: 'Unavailable',
@@ -509,6 +580,9 @@ export const en: Messages = {
     },
     planDescription: (tenorDays: number) =>
       `An on-chain ${tenorDays}-day plan with APR and penalty fixed when a deposit opens.`,
+    testPlanName: 'Test plan',
+    testPlanDescription:
+      'A plan the admin created to exercise the flows, not a savings product.'
   },
   network: {
     title: 'Wallet is on the wrong network',
@@ -527,6 +601,8 @@ export const en: Messages = {
     from: (amount: string) => 'from ' + amount,
     penalty: (rate: string) => 'penalty ' + rate,
     max: (amount: string) => 'Max ' + amount,
+    unlimited: 'No limit',
+    noMinimum: 'No minimum',
     open: 'Open with this plan',
     unavailable: 'Plan closed',
     note:
@@ -547,6 +623,25 @@ export const en: Messages = {
     empty: {
       title: 'No deposits yet',
       description: 'Open your first deposit to start tracking interest and maturity.',
+    },
+    filter: {
+      label: 'Filter by status',
+      all: 'All',
+      running: 'Running',
+      matured: 'Matured',
+      claimable: 'Interest due',
+      plan: 'Plan',
+      planAll: 'Every plan',
+      empty: 'No deposit matches these filters.',
+      clear: 'Clear filters',
+    },
+    sort: {
+      label: 'Sort',
+      recent: 'Newest',
+      oldest: 'Oldest',
+      maturity: 'Matures first',
+      amountDesc: 'Largest principal',
+      amountAsc: 'Smallest principal',
     },
     nftNote:
       'The certificate is an NFT and can be transferred while the deposit is open. Its current owner can withdraw, top up, claim interest or renew; once the deposit is closed the certificate stays put.',
@@ -665,6 +760,12 @@ export const en: Messages = {
       pausedOff: 'Running',
       core: 'Core',
       feeReceiver: 'Fee receiver',
+      solvency: 'Vault liquidity',
+      vaultSplit: 'Vault split',
+      promised: 'Promised',
+      withdrawable: 'Withdrawable',
+      solventOk: 'Covered',
+      solventShort: 'Short',
       roles: 'Wallet roles',
     },
     roles: {
@@ -684,6 +785,9 @@ export const en: Messages = {
       fundLabel: 'Fund the vault',
       withdrawLabel: 'Withdraw from the vault',
       walletHint: (value: string) => 'Wallet holds ' + value + ' USDC',
+      feeLabel: 'Fee receiver',
+      feeHint: 'Receives early-withdrawal penalties. Can be changed at any time.',
+      feeInvalid: 'That is not a valid address.',
       maxHint: (value: string) => 'Max ' + value,
     },
     plans: {
@@ -692,6 +796,26 @@ export const en: Messages = {
       off: 'Disabled',
       enable: 'Enable',
       disable: 'Disable',
+      create: 'Add a plan',
+      edit: 'Edit',
+      save: 'Save',
+      editNote:
+        'Only the APR can change. Tenor, limits and penalty are fixed once a plan exists, because open deposits snapshot them.',
+      createHint:
+        'Tenor is in days; APR and penalty are percentages. A new plan is enabled as soon as it is created.',
+      tenor: 'Tenor (days)',
+      apr: 'APR (%)',
+      penalty: 'Early penalty (%)',
+      min: 'Minimum (USDC)',
+      max: 'Maximum (USDC)',
+      minHint: '0 = no minimum',
+      maxHint: '0 = no cap',
+      submit: 'Create plan',
+      shareTitle: 'Principal by plan',
+      depositCount: (count: number) => count + (count === 1 ? ' deposit' : ' deposits'),
+      cancel: 'Cancel',
+      invalid:
+        'Check the values: tenor at least 1 day, APR 0–100%, penalty 0–100%, minimum not above the maximum (0 means no cap).',
     },
     needRole: {
       admin: 'Requires DEFAULT_ADMIN_ROLE.',
@@ -712,6 +836,7 @@ export const en: Messages = {
     available: 'Wallet available',
     useMax: 'Use max',
     range: (min: string, max: string) => 'Minimum ' + min + ' · maximum ' + max + ' USDC',
+    rangeUncapped: (min: string) => 'Minimum ' + min + ' · no limit',
     expectedInterest: 'Expected interest',
     receiveAtMaturity: 'Receive at maturity',
     maturityDate: 'Maturity date',
@@ -827,7 +952,6 @@ export const en: Messages = {
     noteContractSetup:
       'Connect an injected wallet to read and sign transactions directly against the configured smart contract.',
     chainLoading: 'Reading contract data…',
-    chainReady: 'Connected to the right chain and reading contract data.',
     switchNetwork: 'Switch to Sepolia',
     disconnect: 'Disconnect',
     walletWaiting: 'Waiting for approval…',
@@ -842,6 +966,24 @@ export const en: Messages = {
     errorWrongNetwork: (chainId: string) => 'Switch the wallet to chain ID ' + chainId + ' and try again.',
     toastWalletTitle: (name: string) => name + ' connected',
     toastWalletMessage: 'Each transaction still needs your approval in the wallet.',
+  },
+  faucet: {
+    titleEmpty: 'This wallet has no USDC yet',
+    descriptionEmpty:
+      'The demo runs on MockUSDC on Sepolia. Take test USDC to open a deposit, top up and try settling.',
+    titleFunded: 'Get more test USDC',
+    descriptionFunded: 'MockUSDC mints freely with no cap. Enter the amount you want.',
+    amountLabel: 'Amount of USDC to receive',
+    action: 'Get',
+    pending: 'Waiting…',
+    balance: (value: string) => 'Holding ' + value + ' USDC',
+    successTitle: 'Test USDC received',
+    successMessage: (value: string) => 'The wallet received ' + value + ' test USDC.',
+    errorTitle: 'Could not get test USDC',
+    invalidAmount: 'Enter an amount greater than 0.',
+    tooLarge: (value: string) => 'At most ' + value + ' USDC per request.',
+    gasNote: 'You still need Sepolia ETH for gas. Get it free at',
+    gasLink: 'a Sepolia faucet',
   },
   notFound: {
     title: 'This page is not in the ledger.',
@@ -875,6 +1017,8 @@ export const en: Messages = {
     vaultReserveExceedsBalance:
       'The interest vault does not have enough funds to reserve this interest. Fund the vault first.',
     vaultProtected: 'The vault is holding promised interest and cannot release that part.',
+    rpcUnavailable: 'The wallet RPC did not respond or rejected the request. Check the network and try again.',
+    gasRequired: 'The wallet has no Sepolia ETH for gas. Add test ETH and try again.',
   },
 }
 

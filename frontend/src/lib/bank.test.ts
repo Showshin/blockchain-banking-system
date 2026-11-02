@@ -17,7 +17,6 @@ import {
   topUpInterestFor,
   totalActivePrincipal,
   totalOutstandingInterest,
-  totalSettledInterest,
   totalSettledPnl,
   totalSettledPrincipal,
 } from './bank'
@@ -115,7 +114,7 @@ describe('deposit state', () => {
     expect(settledKind(deposit({ status: 'active' }))).toBeNull()
   })
 
-  it('sums settled principal and certificate interest', () => {
+  it('sums the principal of settled certificates only', () => {
     const values = [
       deposit({ principal: 1_000, interestAtMaturity: 5.5 }),
       deposit({
@@ -128,7 +127,6 @@ describe('deposit state', () => {
       deposit({ principal: 200, interestAtMaturity: 1, status: 'manual-renewed' }),
     ]
     expect(totalSettledPrincipal(values)).toBe(1_000)
-    expect(totalSettledInterest(values)).toBe(6)
   })
 
   it('reports the realised result of a closed certificate', () => {

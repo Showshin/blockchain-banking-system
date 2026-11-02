@@ -12,6 +12,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "doctor": "node scripts/doctor.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
